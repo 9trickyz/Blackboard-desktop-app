@@ -1,6 +1,24 @@
-# Blackboard Desktop App
+<p align="center">
+  <img src="build/icon.png" width="128" height="128" alt="Blackboard App Icon" />
+</p>
 
-A cross-platform, minimal dark glossy desktop blackboard application built with **Electron**, **React**, and **Tailwind CSS**, designed following the **Blackboard Guide** and user specifications.
+<h1 align="center">Blackboard</h1>
+
+---
+
+<p align="center">
+  A cross-platform, minimal dark glossy desktop blackboard application designed for distraction-free sketching, brainstorming, and visual note-taking.
+</p>
+
+<p align="center">
+  Chalk-like responsiveness, smart vector shapes & arrows, rich typography, direct image imports, and tactile glassmorphic docks. Includes auto-save snapshots, always-on-top mode, and instant <code>.blackboard</code> file associations.
+</p>
+
+<p align="center">
+  <strong>Built with Electron, React, and Tailwind CSS &bull; Windows &bull; macOS &bull; Linux</strong>
+</p>
+
+---
 
 ## 🌟 Highlights & Features
 
