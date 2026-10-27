@@ -1,8 +1,6 @@
-const fs = require('fs');
-const path = require('path');
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
-
-
+const path = require('path');
+const fs = require('fs');
 
 let mainWindow = null;
 let isMinitab = false;
@@ -42,7 +40,6 @@ function createWindow() {
   }
 
   mainWindow.on('close', (e) => {
-    fs.appendFileSync('main_debug.log', `[${new Date().toISOString()}] mainWindow on close, isQuitting=${isQuitting}\n`);
     if (!isQuitting) {
       e.preventDefault();
       if (mainWindow && mainWindow.webContents) {
@@ -51,20 +48,10 @@ function createWindow() {
     }
   });
 
-  mainWindow.webContents.on('render-process-gone', (_e, details) => {
-    fs.appendFileSync('main_debug.log', `[${new Date().toISOString()}] render-process-gone: ${JSON.stringify(details)}\n`);
-  });
-
-  mainWindow.webContents.on('did-fail-load', (_e, code, desc) => {
-    fs.appendFileSync('main_debug.log', `[${new Date().toISOString()}] did-fail-load: ${code} ${desc}\n`);
-  });
-
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
 }
-
-
 
 app.whenReady().then(() => {
   createWindow();
@@ -75,7 +62,6 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  fs.appendFileSync('main_debug.log', `[${new Date().toISOString()}] window-all-closed fired\n`);
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -114,14 +100,12 @@ ipcMain.on('window-minitab', () => {
 });
 
 ipcMain.on('window-close', () => {
-  fs.appendFileSync('main_debug.log', `[${new Date().toISOString()}] ipcMain window-close received\n`);
   if (mainWindow) {
     mainWindow.close();
   }
 });
 
 ipcMain.on('window-close-confirmed', () => {
-  fs.appendFileSync('main_debug.log', `[${new Date().toISOString()}] ipcMain window-close-confirmed received\n`);
   isQuitting = true;
   if (mainWindow) {
     mainWindow.close();
