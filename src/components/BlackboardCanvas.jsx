@@ -141,6 +141,72 @@ export default function BlackboardCanvas({
   // Selection & Transformation State
   const [selectedElementIds, setSelectedElementIds] = useState([]);
   const [editingTextId, setEditingTextId] = useState(null);
+
+  // Synchronized refs to avoid stale closures
+  const elementsRef = useRef(elements);
+  elementsRef.current = elements;
+  const editingTextIdRef = useRef(editingTextId);
+  editingTextIdRef.current = editingTextId;
+  const isJustCreatedRef = useRef(false);
+  const hasPushedHistoryForCurrentText = useRef(false);
+  const textareaRef = useRef(null);
+
+  // Commit and deploy currently active text box
+  const commitCurrentText = useCallback(() => {
+    const currentId = editingTextIdRef.current;
+    if (!currentId) return;
+
+    const curElements = elementsRef.current;
+    const currentEl = curElements.find(el => el.id === currentId);
+
+    if (!currentEl || !currentEl.text || !currentEl.text.trim()) {
+      // Discard empty text box cleanly
+      onChangeElements(curElements.filter(el => el.id !== currentId));
+      setSelectedElementIds(prev => prev.filter(id => id !== currentId));
+    } else {
+      // Keep deployed text element
+      setSelectedElementIds([currentId]);
+    }
+    setEditingTextId(null);
+  }, [onChangeElements]);
+
+  // Focus and caret positioning when editingTextId activates
+  useEffect(() => {
+    if (editingTextId) {
+      hasPushedHistoryForCurrentText.current = false;
+      const timer = setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          const len = textareaRef.current.value.length;
+          textareaRef.current.setSelectionRange(len, len);
+        }
+      }, 20);
+      return () => clearTimeout(timer);
+    }
+  }, [editingTextId]);
+
+  // Sync text styling properties to selected text elements
+  useEffect(() => {
+    if (selectedElementIds.length === 0) return;
+    const hasText = elementsRef.current.some(
+      el => selectedElementIds.includes(el.id) && el.type === 'text'
+    );
+    if (!hasText) return;
+
+    onChangeElements(prev =>
+      prev.map(el => {
+        if (!selectedElementIds.includes(el.id) || el.type !== 'text') return el;
+        return {
+          ...el,
+          fontSize: fontSize || 16,
+          color: textColor || '#ffffff',
+          bold: isBold,
+          italic: isItalic,
+          strikethrough: isStrikethrough
+        };
+      })
+    );
+  }, [fontSize, textColor, isBold, isItalic, isStrikethrough, selectedElementIds, onChangeElements]);
   
   // Marquee selection (Grey selection box)
   const isMarqueeSelecting = useRef(false);
@@ -402,6 +468,13 @@ export default function BlackboardCanvas({
     }
 
     if (mode !== 'edit') return;
+
+    // If already editing a text element, clicking on the canvas deploys / commits it
+    if (editingTextIdRef.current) {
+      commitCurrentText();
+      return;
+    }
+
     const coords = toCanvasCoords(e.clientX, e.clientY);
 
     // 1. Check if clicking in Rotate Zone next to selected part -> Hand Grab to Rotate
@@ -493,7 +566,7 @@ export default function BlackboardCanvas({
     // 3. Text Tool
     if (activeTool === 'text') {
       // Check if user clicked an existing text element to edit it
-      const clickedText = [...elements].reverse().find(el => {
+      const clickedText = [...elementsRef.current].reverse().find(el => {
         if (el.type !== 'text') return false;
         const b = getSingleElementBounds(el);
         return coords.x >= b.minX - 6 && coords.x <= b.maxX + 6 && coords.y >= b.minY - 6 && coords.y <= b.maxY + 6;
@@ -508,19 +581,25 @@ export default function BlackboardCanvas({
       const newText = {
         id: 'text_' + Date.now(),
         type: 'text',
-        text: '', // Empty: "Type text here..." is only a guide/placeholder
+        text: '', // Empty initially: "Type text here..." is placeholder guide only
         x: coords.x,
         y: coords.y,
-        fontSize,
-        color: textColor,
+        fontSize: fontSize || 16,
+        color: textColor || '#ffffff',
         bold: isBold,
         italic: isItalic,
         strikethrough: isStrikethrough,
         opacity: transparency,
         rotation: 0
       };
-      onPushHistory();
-      onChangeElements([...elements, newText]);
+
+      // Mark as just created to ignore immediate focus loss on click release
+      isJustCreatedRef.current = true;
+      setTimeout(() => {
+        isJustCreatedRef.current = false;
+      }, 400);
+
+      onChangeElements([...elementsRef.current, newText]);
       setSelectedElementIds([newText.id]);
       setEditingTextId(newText.id);
       return;
@@ -907,14 +986,9 @@ export default function BlackboardCanvas({
   // Double click handler to edit existing text
   const handleDoubleClick = (e) => {
     if (mode === 'view') return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
-    const coords = screenToCanvas(screenX, screenY);
+    const coords = toCanvasCoords(e.clientX, e.clientY);
 
-    const clickedText = [...elements].reverse().find(el => {
+    const clickedText = [...elementsRef.current].reverse().find(el => {
       if (el.type !== 'text') return false;
       const b = getSingleElementBounds(el);
       return coords.x >= b.minX - 8 && coords.x <= b.maxX + 8 && coords.y >= b.minY - 8 && coords.y <= b.maxY + 8;
@@ -961,6 +1035,7 @@ export default function BlackboardCanvas({
       {/* Inline Textarea Overlay */}
       {editingTextElement && (
         <textarea
+          ref={textareaRef}
           autoFocus
           value={editingTextElement.text}
           placeholder="Type text here..."
@@ -969,36 +1044,44 @@ export default function BlackboardCanvas({
           onClick={(e) => e.stopPropagation()}
           onDoubleClick={(e) => e.stopPropagation()}
           onChange={(e) => {
+            if (!hasPushedHistoryForCurrentText.current) {
+              onPushHistory();
+              hasPushedHistoryForCurrentText.current = true;
+            }
             const val = e.target.value;
-            onChangeElements(elements.map(el => el.id === editingTextId ? { ...el, text: val } : el));
+            onChangeElements(elementsRef.current.map(el => el.id === editingTextId ? { ...el, text: val } : el));
           }}
           onBlur={() => {
-            if (!editingTextElement.text || !editingTextElement.text.trim()) {
-              onChangeElements(elements.filter(el => el.id !== editingTextId));
-              setSelectedElementIds(prev => prev.filter(id => id !== editingTextId));
+            if (isJustCreatedRef.current) {
+              textareaRef.current?.focus();
+              return;
             }
-            setEditingTextId(null);
+            commitCurrentText();
           }}
           onKeyDown={(e) => {
             e.stopPropagation();
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              commitCurrentText();
+              return;
+            }
             if (e.key === 'Escape') {
-              if (!editingTextElement.text || !editingTextElement.text.trim()) {
-                onChangeElements(elements.filter(el => el.id !== editingTextId));
-                setSelectedElementIds(prev => prev.filter(id => id !== editingTextId));
-              }
-              setEditingTextId(null);
+              e.preventDefault();
+              commitCurrentText();
+              return;
             }
           }}
           style={{
             position: 'absolute',
             left: `${editingTextElement.x * viewTransform.scale + viewTransform.x}px`,
-            top: `${editingTextElement.y * viewTransform.scale + viewTransform.y - (editingTextElement.fontSize * viewTransform.scale * 1.2)}px`,
+            top: `${editingTextElement.y * viewTransform.scale + viewTransform.y - ((editingTextElement.fontSize || 16) * viewTransform.scale * 1.15)}px`,
             fontSize: `${(editingTextElement.fontSize || 16) * viewTransform.scale}px`,
+            lineHeight: 1.35,
             color: editingTextElement.color || '#ffffff',
             fontWeight: editingTextElement.bold ? 'bold' : 'normal',
             fontStyle: editingTextElement.italic ? 'italic' : 'normal',
             textDecoration: editingTextElement.strikethrough ? 'line-through' : 'none',
-            background: 'rgba(0,0,0,0.75)',
+            background: 'rgba(20, 20, 25, 0.88)',
             border: '1px dashed rgba(255, 255, 255, 0.45)',
             borderRadius: '6px',
             padding: '4px 8px',
