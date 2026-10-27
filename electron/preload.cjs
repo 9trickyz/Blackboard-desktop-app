@@ -12,6 +12,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAlwaysOnTop: (flag) => ipcRenderer.send('window-always-on-top', flag),
   saveFile: (data) => ipcRenderer.invoke('save-file-dialog', data),
   openFile: () => ipcRenderer.invoke('open-file-dialog'),
+  getInitialFile: () => ipcRenderer.invoke('get-initial-file'),
+  onFileOpened: (callback) => {
+    ipcRenderer.on('file-opened', (_event, data) => callback(data));
+  },
   onMinitabChanged: (callback) => {
     ipcRenderer.on('minitab-state-changed', (_event, state) => callback(state));
   }

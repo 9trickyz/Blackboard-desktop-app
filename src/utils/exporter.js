@@ -288,13 +288,38 @@ export function drawTextToContext(ctx, el) {
   ctx.restore();
 }
 
+export function hydrateElements(elements) {
+  if (!elements || !Array.isArray(elements)) return [];
+  return elements.map(el => {
+    if (el.type === 'image' && el.src) {
+      const isRealImage =
+        el.imgElement &&
+        typeof el.imgElement === 'object' &&
+        el.imgElement instanceof HTMLImageElement &&
+        el.imgElement.src;
+      if (!isRealImage) {
+        const img = new Image();
+        img.src = el.src;
+        return { ...el, imgElement: img };
+      }
+    }
+    return el;
+  });
+}
+
 export function drawImageToContext(ctx, el) {
-  if (!el.imgElement && el.src) {
+  const isRealImage =
+    el.imgElement &&
+    typeof el.imgElement === 'object' &&
+    el.imgElement instanceof HTMLImageElement &&
+    el.imgElement.src;
+
+  if (!isRealImage && el.src) {
     const img = new Image();
     img.src = el.src;
     el.imgElement = img;
   }
-  if (el.imgElement && el.imgElement.complete) {
+  if (el.imgElement && el.imgElement.complete && el.imgElement.naturalWidth > 0) {
     ctx.save();
     if (el.rotation) {
       const cx = el.x + el.width / 2;

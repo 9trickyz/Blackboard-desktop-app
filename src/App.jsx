@@ -8,14 +8,15 @@ import PenPopover from './components/Popovers/PenPopover';
 import ColorWheelModal from './components/ColorWheelModal';
 import SettingsModal from './components/SettingsModal';
 import SavePromptModal from './components/SavePromptModal';
-import { exportBoard } from './utils/exporter';
+import { exportBoard, hydrateElements } from './utils/exporter';
 import {
   loadSettings,
   saveSettings,
   saveCurrentBoard,
   clearCurrentBoard,
   loadCurrentBoard,
-  createMilestoneSnapshot
+  createMilestoneSnapshot,
+  sanitizeElementsForSave
 } from './utils/storage';
 
 export default function App() {
@@ -97,11 +98,46 @@ export default function App() {
     }
   }, [pattern]);
 
+  // Load Board from string content or parsed JSON
+  const loadBoardFromContent = useCallback((content, sourcePath) => {
+    try {
+      const parsed = typeof content === 'string' ? JSON.parse(content) : content;
+      if (parsed && Array.isArray(parsed.elements)) {
+        setHistory(prev => [...prev.slice(-30), elementsRef.current]);
+        setFuture([]);
+        const hydrated = hydrateElements(parsed.elements);
+        setElements(hydrated);
+
+        let boardTitle = parsed.title;
+        if ((!boardTitle || boardTitle === 'Untitled') && sourcePath) {
+          const base = sourcePath.split(/[\\/]/).pop();
+          boardTitle = base.replace(/\.(blackboard|json)$/i, '');
+        }
+        setTitle(boardTitle || 'Untitled');
+        setPattern(parsed.pattern || 'blank');
+        setIsDirty(false);
+        isDirtyRef.current = false;
+
+        saveCurrentBoard({
+          title: boardTitle || 'Untitled',
+          elements: parsed.elements,
+          pattern: parsed.pattern || 'blank',
+          isDirty: false
+        });
+        return true;
+      }
+    } catch (err) {
+      console.error('Failed to parse blackboard file:', err);
+      alert('Could not open file: invalid blackboard format');
+    }
+    return false;
+  }, []);
+
   // Load initial board or crash / shutdown draft from offline cache
   useEffect(() => {
     const saved = loadCurrentBoard();
     if (saved && saved.elements && saved.elements.length > 0) {
-      setElements(saved.elements);
+      setElements(hydrateElements(saved.elements));
       if (saved.title) setTitle(saved.title);
       if (saved.pattern) setPattern(saved.pattern);
       if (saved.isDirty) {
@@ -119,6 +155,25 @@ export default function App() {
       isInitialMount.current = false;
     }, 150);
     return () => clearTimeout(timer);
+  }, []);
+
+  // Listen to direct file opening from Windows Explorer (double clicking .blackboard file)
+  useEffect(() => {
+    if (window.electronAPI && window.electronAPI.getInitialFile) {
+      window.electronAPI.getInitialFile().then(fileData => {
+        if (fileData && fileData.content) {
+          loadBoardFromContent(fileData.content, fileData.filePath || fileData.fileName);
+        }
+      });
+    }
+
+    if (window.electronAPI && window.electronAPI.onFileOpened) {
+      window.electronAPI.onFileOpened(fileData => {
+        if (fileData && fileData.content) {
+          loadBoardFromContent(fileData.content, fileData.filePath || fileData.fileName);
+        }
+      });
+    }
   }, []);
 
   // Listen to Electron Minitab events
@@ -204,7 +259,7 @@ export default function App() {
       version: 1,
       title: curTitle,
       pattern: curPattern,
-      elements: curElements,
+      elements: sanitizeElementsForSave(curElements),
       savedAt: new Date().toISOString()
     };
     const content = JSON.stringify(boardData, null, 2);
@@ -226,7 +281,7 @@ export default function App() {
         isDirtyRef.current = false;
         saveCurrentBoard({
           title: curTitle,
-          elements: curElements,
+          elements: sanitizeElementsForSave(curElements),
           pattern: curPattern,
           isDirty: false
         });
@@ -427,19 +482,7 @@ export default function App() {
     if (window.electronAPI && window.electronAPI.openFile) {
       const res = await window.electronAPI.openFile();
       if (res && res.success && res.content) {
-        try {
-          const parsed = JSON.parse(res.content);
-          if (parsed.elements) {
-            pushHistory();
-            setElements(parsed.elements);
-            if (parsed.title) setTitle(parsed.title);
-            if (parsed.pattern) setPattern(parsed.pattern);
-            setIsDirty(false);
-            isDirtyRef.current = false;
-          }
-        } catch (e) {
-          alert('Invalid blackboard file format');
-        }
+        loadBoardFromContent(res.content, res.filePath);
       }
     } else {
       fileInputRef.current && fileInputRef.current.click();
@@ -451,19 +494,7 @@ export default function App() {
     if (file) {
       const reader = new FileReader();
       reader.onload = (event) => {
-        try {
-          const parsed = JSON.parse(event.target.result);
-          if (parsed.elements) {
-            pushHistory();
-            setElements(parsed.elements);
-            if (parsed.title) setTitle(parsed.title);
-            if (parsed.pattern) setPattern(parsed.pattern);
-            setIsDirty(false);
-            isDirtyRef.current = false;
-          }
-        } catch (err) {
-          alert('Could not open file: invalid JSON');
-        }
+        loadBoardFromContent(event.target.result, file.name);
       };
       reader.readAsText(file);
     }
@@ -560,8 +591,71 @@ export default function App() {
     }
   };
 
+  // Drag and Drop files (.blackboard documents or image files)
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    const fileName = file.name.toLowerCase();
+
+    if (fileName.endsWith('.blackboard') || fileName.endsWith('.json')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        loadBoardFromContent(event.target.result, file.name);
+      };
+      reader.readAsText(file);
+    } else if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = 500;
+          let w = img.width;
+          let h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) {
+              h = (h / w) * maxDim;
+              w = maxDim;
+            } else {
+              w = (w / h) * maxDim;
+              h = maxDim;
+            }
+          }
+          const newImgEl = {
+            id: 'img_' + Date.now(),
+            type: 'image',
+            src: event.target.result,
+            imgElement: img,
+            x: 200,
+            y: 150,
+            width: w,
+            height: h,
+            opacity: 100
+          };
+          pushHistory();
+          setElements(prev => [...prev, newImgEl]);
+          setActiveTool('select');
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   return (
-    <div className="relative w-screen h-screen flex flex-col overflow-hidden rounded-xl glossy-blackboard-bg">
+    <div
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      className="relative w-screen h-screen flex flex-col overflow-hidden rounded-xl glossy-blackboard-bg"
+    >
       {/* Hidden File Inputs */}
       <input
         ref={fileInputRef}
@@ -701,7 +795,7 @@ export default function App() {
         onRestoreSnapshot={(data) => {
           if (data && data.elements) {
             pushHistory();
-            setElements(data.elements);
+            setElements(hydrateElements(data.elements));
             if (data.title) setTitle(data.title);
             if (data.pattern) setPattern(data.pattern);
           }

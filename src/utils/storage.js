@@ -77,10 +77,23 @@ export function saveSettings(settings) {
   }
 }
 
+export function sanitizeElementsForSave(elements) {
+  if (!elements || !Array.isArray(elements)) return [];
+  return elements.map(el => {
+    if (el.type === 'image') {
+      const { imgElement, ...rest } = el;
+      return rest;
+    }
+    return el;
+  });
+}
+
 export function saveCurrentBoard(boardData) {
   try {
+    const sanitizedElements = boardData.elements ? sanitizeElementsForSave(boardData.elements) : [];
     const payload = JSON.stringify({
       ...boardData,
+      elements: sanitizedElements,
       savedAt: new Date().toISOString()
     });
     localStorage.setItem(STORAGE_KEY, payload);
@@ -111,13 +124,17 @@ export function createMilestoneSnapshot(boardData, tag = 'Auto milestone') {
   try {
     const existingRaw = localStorage.getItem(SNAPSHOTS_KEY);
     const snapshots = existingRaw ? JSON.parse(existingRaw) : [];
+    const sanitizedData = {
+      ...boardData,
+      elements: boardData.elements ? sanitizeElementsForSave(boardData.elements) : []
+    };
     const snapshot = {
       id: 'snap_' + Date.now(),
       timestamp: new Date().toISOString(),
       tag,
-      elementCount: boardData.elements ? boardData.elements.length : 0,
+      elementCount: sanitizedData.elements.length,
       title: boardData.title || 'Untitled',
-      data: boardData
+      data: sanitizedData
     };
     const updated = [snapshot, ...snapshots.slice(0, 19)];
     localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(updated));
