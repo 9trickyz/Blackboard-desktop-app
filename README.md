@@ -26,7 +26,7 @@
   <img src="https://img.shields.io/badge/React-19-20232A?style=flat&logo=react&logoColor=61DAFB" alt="React" />
   <img src="https://img.shields.io/badge/Tailwind_CSS-4.0-06B6D4?style=flat&logo=tailwindcss&logoColor=white" alt="Tailwind CSS" />
   <img src="https://img.shields.io/badge/code-MIT-44cc11?style=flat" alt="MIT License" />
-  <img src="https://img.shields.io/github/stars/9trickyz/Blackboard-Floating-desktop-app-beta?style=flat&logo=github" alt="GitHub Stars" />
+  <img src="https://img.shields.io/github/stars/9trickyz/Blackboard-desktop-app?style=flat&logo=github" alt="GitHub Stars" />
 </p>
 
 ---
