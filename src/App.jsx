@@ -561,7 +561,7 @@ export default function App() {
   };
 
   return (
-    <div className="relative w-screen h-screen flex flex-col overflow-hidden glossy-blackboard-bg">
+    <div className="relative w-screen h-screen flex flex-col overflow-hidden rounded-xl glossy-blackboard-bg">
       {/* Hidden File Inputs */}
       <input
         ref={fileInputRef}

@@ -50,6 +50,9 @@ textarea::placeholder {
   backdrop-filter: blur(36px) saturate(180%);
   -webkit-backdrop-filter: blur(36px) saturate(180%);
   position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* Background grid & dotted textures */
