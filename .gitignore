@@ -31,7 +31,8 @@ lerna-debug.log*
 *.sw?
 Thumbs.db
 
-# Environment variables
+# Large files / Documentation
+*.pdf
 .env
 .env.development.local
 .env.test.local
