@@ -15,7 +15,18 @@
 </p>
 
 <p align="center">
-  <strong>Built with Electron, React, and Tailwind CSS &bull; Windows &bull; macOS &bull; Linux</strong>
+  <img src="https://img.shields.io/badge/version-v1.0.0-007acc?style=flat" alt="Version" />
+  <img src="https://img.shields.io/badge/Windows-10%2F11-0078d4?style=flat&logo=windows&logoColor=white" alt="Windows" />
+  <img src="https://img.shields.io/badge/macOS-12%2B-000000?style=flat&logo=apple&logoColor=white" alt="macOS" />
+  <img src="https://img.shields.io/badge/Linux-AppImage%20%7C%20deb%20%7C%20rpm-FCC624?style=flat&logo=linux&logoColor=black" alt="Linux" />
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Electron-40-47848F?style=flat&logo=electron&logoColor=white" alt="Electron" />
+  <img src="https://img.shields.io/badge/React-19-20232A?style=flat&logo=react&logoColor=61DAFB" alt="React" />
+  <img src="https://img.shields.io/badge/Tailwind_CSS-4.0-06B6D4?style=flat&logo=tailwindcss&logoColor=white" alt="Tailwind CSS" />
+  <img src="https://img.shields.io/badge/code-MIT-44cc11?style=flat" alt="MIT License" />
+  <img src="https://img.shields.io/github/stars/9trickyz/Blackboard-Floating-desktop-app-beta?style=flat&logo=github" alt="GitHub Stars" />
 </p>
 
 ---
