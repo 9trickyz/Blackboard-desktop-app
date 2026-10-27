@@ -337,6 +337,22 @@ canvas {
   cursor: move !important;
 }
 
+.cursor-nwse-resize {
+  cursor: nwse-resize !important;
+}
+
+.cursor-nesw-resize {
+  cursor: nesw-resize !important;
+}
+
+.cursor-ns-resize {
+  cursor: ns-resize !important;
+}
+
+.cursor-ew-resize {
+  cursor: ew-resize !important;
+}
+
 .cursor-crosshair {
   cursor: crosshair !important;
 }

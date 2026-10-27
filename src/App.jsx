@@ -672,6 +672,7 @@ export default function App() {
           transparency={transparency}
           textColor={textColor}
           fontSize={fontSize}
+          onChangeFontSize={setFontSize}
           isBold={isBold}
           isItalic={isItalic}
           isStrikethrough={isStrikethrough}

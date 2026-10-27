@@ -104,6 +104,98 @@ function getCombinedBounds(elements, selectedIds) {
   };
 }
 
+// 8 Selection handles helper (for resizing text size and shape dimensions)
+function getSelectionHandles(combinedBounds, pad = 4) {
+  if (!combinedBounds) return [];
+  const { minX, minY, maxX, maxY } = combinedBounds;
+  const boxX = minX - pad;
+  const boxY = minY - pad;
+  const boxW = (maxX - minX) + pad * 2;
+  const boxH = (maxY - minY) + pad * 2;
+  const midX = boxX + boxW / 2;
+  const midY = boxY + boxH / 2;
+  const rightX = boxX + boxW;
+  const bottomY = boxY + boxH;
+
+  return [
+    {
+      id: 'nw',
+      x: boxX,
+      y: boxY,
+      cursor: 'nwse-resize',
+      anchorX: rightX,
+      anchorY: bottomY
+    },
+    {
+      id: 'n',
+      x: midX,
+      y: boxY,
+      cursor: 'ns-resize',
+      anchorX: midX,
+      anchorY: bottomY
+    },
+    {
+      id: 'ne',
+      x: rightX,
+      y: boxY,
+      cursor: 'nesw-resize',
+      anchorX: boxX,
+      anchorY: bottomY
+    },
+    {
+      id: 'e',
+      x: rightX,
+      y: midY,
+      cursor: 'ew-resize',
+      anchorX: boxX,
+      anchorY: midY
+    },
+    {
+      id: 'se',
+      x: rightX,
+      y: bottomY,
+      cursor: 'nwse-resize',
+      anchorX: boxX,
+      anchorY: boxY
+    },
+    {
+      id: 's',
+      x: midX,
+      y: bottomY,
+      cursor: 'ns-resize',
+      anchorX: midX,
+      anchorY: boxY
+    },
+    {
+      id: 'sw',
+      x: boxX,
+      y: bottomY,
+      cursor: 'nesw-resize',
+      anchorX: rightX,
+      anchorY: boxY
+    },
+    {
+      id: 'w',
+      x: boxX,
+      y: midY,
+      cursor: 'ew-resize',
+      anchorX: rightX,
+      anchorY: midY
+    }
+  ];
+}
+
+function findHandleAtCoords(handles, coords, scale) {
+  // Hit radius: 9 pixels in screen space
+  const hitRadius = 9 / (scale || 1);
+  for (const h of handles) {
+    if (Math.hypot(coords.x - h.x, coords.y - h.y) <= hitRadius) {
+      return h;
+    }
+  }
+  return null;
+}
+
 export default function BlackboardCanvas({
   elements,
   onChangeElements,
@@ -116,6 +208,7 @@ export default function BlackboardCanvas({
   transparency,
   textColor,
   fontSize,
+  onChangeFontSize,
   isBold,
   isItalic,
   isStrikethrough,
@@ -185,24 +278,47 @@ export default function BlackboardCanvas({
     }
   }, [editingTextId]);
 
-  // Sync text styling properties to selected text elements
-  useEffect(() => {
-    if (selectedElementIds.length === 0) return;
-    const hasText = elementsRef.current.some(
-      el => selectedElementIds.includes(el.id) && el.type === 'text'
-    );
-    if (!hasText) return;
+  // Handle Resizing State (for dynamically changing text size & element dimensions via selection box handles)
+  const isResizing = useRef(false);
+  const activeResizeHandle = useRef(null);
+  const resizeInitialData = useRef(null);
+  const [resizeTooltip, setResizeTooltip] = useState(null);
 
-    onChangeElements(prev =>
-      prev.map(el => {
+  // Sync toolbar font size when a single text element is selected
+  useEffect(() => {
+    if (selectedElementIds.length === 1 && onChangeFontSize) {
+      const selectedEl = elementsRef.current.find(el => el.id === selectedElementIds[0]);
+      if (selectedEl && selectedEl.type === 'text' && selectedEl.fontSize) {
+        onChangeFontSize(selectedEl.fontSize);
+      }
+    }
+  }, [selectedElementIds, onChangeFontSize]);
+
+  // Sync toolbar styling property changes to selected text elements safely (only when property actively changes)
+  const prevPropsRef = useRef({ fontSize, textColor, isBold, isItalic, isStrikethrough });
+  useEffect(() => {
+    const prev = prevPropsRef.current;
+    const fsChanged = prev.fontSize !== fontSize;
+    const colChanged = prev.textColor !== textColor;
+    const bChanged = prev.isBold !== isBold;
+    const itChanged = prev.isItalic !== isItalic;
+    const strChanged = prev.isStrikethrough !== isStrikethrough;
+    prevPropsRef.current = { fontSize, textColor, isBold, isItalic, isStrikethrough };
+
+    if (!fsChanged && !colChanged && !bChanged && !itChanged && !strChanged) return;
+    if (isResizing.current) return;
+    if (selectedElementIds.length === 0) return;
+
+    onChangeElements(prevEls =>
+      prevEls.map(el => {
         if (!selectedElementIds.includes(el.id) || el.type !== 'text') return el;
         return {
           ...el,
-          fontSize: fontSize || 16,
-          color: textColor || '#ffffff',
-          bold: isBold,
-          italic: isItalic,
-          strikethrough: isStrikethrough
+          fontSize: fsChanged ? (fontSize || 16) : el.fontSize,
+          color: colChanged ? (textColor || '#ffffff') : el.color,
+          bold: bChanged ? isBold : el.bold,
+          italic: itChanged ? isItalic : el.italic,
+          strikethrough: strChanged ? isStrikethrough : el.strikethrough
         };
       })
     );
@@ -297,14 +413,18 @@ export default function BlackboardCanvas({
     return coords.x >= minX + innerPad && coords.x <= maxX - innerPad && coords.y >= minY + innerPad && coords.y <= maxY - innerPad;
   }, [combinedBounds, selectedElementIds, activeTool, viewTransform.scale]);
 
-  // Check if coordinates are in the rotation zone (perimeter / handles / close to selection)
+  // Check if coordinates are in the rotation zone (perimeter / close to selection outside handles)
   const checkIsInRotateZone = useCallback((coords) => {
     if (!combinedBounds || selectedElementIds.length === 0 || activeTool !== 'select') {
       return false;
     }
+    const handles = getSelectionHandles(combinedBounds);
+    if (findHandleAtCoords(handles, coords, viewTransform.scale)) {
+      return false; // Resize handles take precedence over rotation
+    }
     const { minX, minY, maxX, maxY } = combinedBounds;
     const scale = viewTransform.scale;
-    const outerPad = 32 / scale;
+    const outerPad = 26 / scale;
     const innerPad = 4 / scale;
 
     const inOuter = coords.x >= minX - outerPad && coords.x <= maxX + outerPad && coords.y >= minY - outerPad && coords.y <= maxY + outerPad;
@@ -391,20 +511,11 @@ export default function BlackboardCanvas({
 
         // 8 small circular handles (matching Photo 2)
         const handleRadius = 3.5 / viewTransform.scale;
-        const handlePoints = [
-          [boxX, boxY],
-          [boxX + boxW / 2, boxY],
-          [boxX + boxW, boxY],
-          [boxX, boxY + boxH / 2],
-          [boxX + boxW, boxY + boxH / 2],
-          [boxX, boxY + boxH],
-          [boxX + boxW / 2, boxY + boxH],
-          [boxX + boxW, boxY + boxH]
-        ];
+        const handles = getSelectionHandles(combinedBounds);
 
-        for (const [hx, hy] of handlePoints) {
+        for (const h of handles) {
           ctx.beginPath();
-          ctx.arc(hx, hy, handleRadius, 0, Math.PI * 2);
+          ctx.arc(h.x, h.y, handleRadius, 0, Math.PI * 2);
           ctx.fillStyle = '#ffffff';
           ctx.fill();
           ctx.strokeStyle = '#4b5563';
@@ -433,6 +544,27 @@ export default function BlackboardCanvas({
           ctx.restore();
         }
 
+        // Live font size / dimension tooltip when resizing via selection box handles
+        if (resizeTooltip) {
+          ctx.save();
+          ctx.fillStyle = 'rgba(17, 24, 39, 0.9)';
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+          ctx.lineWidth = 1 / viewTransform.scale;
+          const badgeW = 48 / viewTransform.scale;
+          const badgeH = 18 / viewTransform.scale;
+          const badgeX = resizeTooltip.x + 14 / viewTransform.scale;
+          const badgeY = resizeTooltip.y - 20 / viewTransform.scale;
+          ctx.fillRect(badgeX, badgeY, badgeW, badgeH);
+          ctx.strokeRect(badgeX, badgeY, badgeW, badgeH);
+
+          ctx.fillStyle = '#ffffff';
+          ctx.font = `bold ${10 / viewTransform.scale}px Inter, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(resizeTooltip.text, badgeX + badgeW / 2, badgeY + badgeH / 2);
+          ctx.restore();
+        }
+
         ctx.restore();
       }
 
@@ -456,7 +588,7 @@ export default function BlackboardCanvas({
 
     animationFrameId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animationFrameId);
-  }, [elements, viewTransform, activeDraft, selectedElementIds, combinedBounds, marqueeBox, editingTextId, activeTool, currentAngleDeg, rotateTooltipPos, settings.performance?.fpsLimit]);
+  }, [elements, viewTransform, activeDraft, selectedElementIds, combinedBounds, marqueeBox, editingTextId, activeTool, currentAngleDeg, rotateTooltipPos, resizeTooltip, settings.performance?.fpsLimit]);
 
   // Pointer Down
   const handlePointerDown = (e) => {
@@ -477,7 +609,44 @@ export default function BlackboardCanvas({
 
     const coords = toCanvasCoords(e.clientX, e.clientY);
 
-    // 1. Check if clicking in Rotate Zone next to selected part -> Hand Grab to Rotate
+    // 1. Check if clicking directly on a Selection Resize Handle (Text Size & Scale)
+    if (combinedBounds && selectedElementIds.length > 0 && activeTool === 'select') {
+      const handles = getSelectionHandles(combinedBounds);
+      const clickedHandle = findHandleAtCoords(handles, coords, viewTransform.scale);
+      if (clickedHandle) {
+        isResizing.current = true;
+        activeResizeHandle.current = clickedHandle;
+        const vLen = Math.hypot(clickedHandle.x - clickedHandle.anchorX, clickedHandle.y - clickedHandle.anchorY);
+        resizeInitialData.current = {
+          handle: clickedHandle,
+          startCoords: coords,
+          vectorLen: vLen,
+          unitVector: {
+            x: (clickedHandle.x - clickedHandle.anchorX) / Math.max(0.001, vLen),
+            y: (clickedHandle.y - clickedHandle.anchorY) / Math.max(0.001, vLen)
+          },
+          elements: elementsRef.current
+            .filter(el => selectedElementIds.includes(el.id))
+            .map(el => ({
+              ...el,
+              initialFontSize: el.fontSize || 16,
+              initialX: el.x,
+              initialY: el.y,
+              initialWidth: el.width,
+              initialHeight: el.height,
+              initialX1: el.x1,
+              initialY1: el.y1,
+              initialX2: el.x2,
+              initialY2: el.y2,
+              initialPoints: el.points ? el.points.map(p => ({ ...p })) : null
+            }))
+        };
+        setCursorMode(clickedHandle.cursor);
+        return;
+      }
+    }
+
+    // 2. Check if clicking in Rotate Zone next to selected part -> Hand Grab to Rotate
     if (checkIsInRotateZone(coords)) {
       isRotating.current = true;
       rotateCenter.current = { x: combinedBounds.centerX, y: combinedBounds.centerY };
@@ -676,9 +845,92 @@ export default function BlackboardCanvas({
 
     const coords = toCanvasCoords(e.clientX, e.clientY);
 
-    // 1. Dynamic Cursor: Hand Grab Cursor when close/hovering next to selected part
-    if (activeTool === 'select' && !isDraggingSelection.current && !isMarqueeSelecting.current && !isRotating.current) {
-      if (checkIsInRotateZone(coords)) {
+    // 1. Handle Active Selection Resize (changing text size & element dimensions)
+    if (isResizing.current && resizeInitialData.current) {
+      const { handle, vectorLen, unitVector, elements: initEls } = resizeInitialData.current;
+      const anchorX = handle.anchorX;
+      const anchorY = handle.anchorY;
+
+      // Project mouse vector from anchor onto initial handle vector
+      const dx = coords.x - anchorX;
+      const dy = coords.y - anchorY;
+      const proj = dx * unitVector.x + dy * unitVector.y;
+      const rawScale = proj / Math.max(0.001, vectorLen);
+      const scaleFactor = Math.max(0.1, Math.min(10, rawScale));
+
+      let primaryFontSize = null;
+
+      const updated = elementsRef.current.map(el => {
+        const init = initEls.find(item => item.id === el.id);
+        if (!init) return el;
+
+        if (init.type === 'text') {
+          const newSize = Math.max(8, Math.min(160, Math.round(init.initialFontSize * scaleFactor)));
+          primaryFontSize = newSize;
+          return {
+            ...el,
+            fontSize: newSize,
+            x: anchorX + (init.initialX - anchorX) * scaleFactor,
+            y: anchorY + (init.initialY - anchorY) * scaleFactor
+          };
+        }
+
+        if (init.type === 'shape' || init.type === 'image') {
+          return {
+            ...el,
+            x: anchorX + (init.initialX - anchorX) * scaleFactor,
+            y: anchorY + (init.initialY - anchorY) * scaleFactor,
+            width: Math.max(5, init.initialWidth * scaleFactor),
+            height: Math.max(5, init.initialHeight * scaleFactor)
+          };
+        }
+
+        if (init.type === 'line') {
+          return {
+            ...el,
+            x1: anchorX + (init.initialX1 - anchorX) * scaleFactor,
+            y1: anchorY + (init.initialY1 - anchorY) * scaleFactor,
+            x2: anchorX + (init.initialX2 - anchorX) * scaleFactor,
+            y2: anchorY + (init.initialY2 - anchorY) * scaleFactor
+          };
+        }
+
+        if (init.type === 'pen' && init.initialPoints) {
+          return {
+            ...el,
+            points: init.initialPoints.map(p => ({
+              x: anchorX + (p.x - anchorX) * scaleFactor,
+              y: anchorY + (p.y - anchorY) * scaleFactor
+            }))
+          };
+        }
+
+        return el;
+      });
+
+      onChangeElements(updated);
+
+      if (primaryFontSize !== null) {
+        setResizeTooltip({
+          x: coords.x,
+          y: coords.y,
+          text: `${primaryFontSize}px`
+        });
+        if (onChangeFontSize) {
+          onChangeFontSize(primaryFontSize);
+        }
+      }
+      return;
+    }
+
+    // 2. Dynamic Cursor: Hovering over handles, rotation zone, or move zone
+    if (activeTool === 'select' && !isDraggingSelection.current && !isMarqueeSelecting.current && !isRotating.current && !isResizing.current) {
+      const handles = combinedBounds ? getSelectionHandles(combinedBounds) : [];
+      const hoveredHandle = findHandleAtCoords(handles, coords, viewTransform.scale);
+
+      if (hoveredHandle) {
+        if (cursorMode !== hoveredHandle.cursor) setCursorMode(hoveredHandle.cursor);
+      } else if (checkIsInRotateZone(coords)) {
         if (cursorMode !== 'hand-grab') setCursorMode('hand-grab');
       } else if (checkIsInMoveZone(coords)) {
         if (cursorMode !== 'move') setCursorMode('move');
@@ -839,6 +1091,30 @@ export default function BlackboardCanvas({
     }
 
     const coords = e && e.clientX !== undefined ? toCanvasCoords(e.clientX, e.clientY) : null;
+
+    if (isResizing.current) {
+      isResizing.current = false;
+      activeResizeHandle.current = null;
+      resizeInitialData.current = null;
+      setResizeTooltip(null);
+      if (coords && combinedBounds) {
+        const handles = getSelectionHandles(combinedBounds);
+        const hoveredHandle = findHandleAtCoords(handles, coords, viewTransform.scale);
+        if (hoveredHandle) {
+          setCursorMode(hoveredHandle.cursor);
+        } else if (checkIsInRotateZone(coords)) {
+          setCursorMode('hand-grab');
+        } else if (checkIsInMoveZone(coords)) {
+          setCursorMode('move');
+        } else {
+          setCursorMode('default');
+        }
+      } else {
+        setCursorMode('default');
+      }
+      onPushHistory();
+      return;
+    }
 
     if (isRotating.current) {
       isRotating.current = false;
@@ -1009,6 +1285,10 @@ export default function BlackboardCanvas({
       if (cursorMode === 'hand-grabbing') return 'cursor-hand-grabbing';
       if (cursorMode === 'hand-grab') return 'cursor-hand-grab';
       if (cursorMode === 'move') return 'cursor-move';
+      if (cursorMode === 'nwse-resize') return 'cursor-nwse-resize';
+      if (cursorMode === 'nesw-resize') return 'cursor-nesw-resize';
+      if (cursorMode === 'ns-resize') return 'cursor-ns-resize';
+      if (cursorMode === 'ew-resize') return 'cursor-ew-resize';
       return 'cursor-default';
     }
     return 'cursor-crosshair';
