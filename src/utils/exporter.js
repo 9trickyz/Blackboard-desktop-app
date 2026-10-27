@@ -250,6 +250,7 @@ export function drawPenStrokeToContext(ctx, el) {
 }
 
 export function drawTextToContext(ctx, el) {
+  if (!el.text || !el.text.trim()) return;
   ctx.save();
   const fontStyle = el.italic ? 'italic ' : '';
   const fontWeight = el.bold ? 'bold ' : 'normal ';

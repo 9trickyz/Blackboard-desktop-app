@@ -39,17 +39,21 @@ function getSingleElementBounds(el) {
     };
   }
   if (el.type === 'text') {
-    const approxW = Math.max(80, (el.text || '').length * (el.fontSize || 16) * 0.6);
-    const h = (el.fontSize || 16) * 1.4;
+    const lines = (el.text || '').split('\n');
+    let maxLineLen = 0;
+    lines.forEach(l => { if (l.length > maxLineLen) maxLineLen = l.length; });
+    const approxW = Math.max(60, maxLineLen * (el.fontSize || 16) * 0.62);
+    const lineCount = Math.max(1, lines.length);
+    const h = (el.fontSize || 16) * 1.35 * lineCount;
     return {
       minX: el.x,
-      minY: el.y - h,
+      minY: el.y - (el.fontSize || 16),
       maxX: el.x + approxW,
-      maxY: el.y,
+      maxY: el.y + h - (el.fontSize || 16),
       width: approxW,
       height: h,
       centerX: el.x + approxW / 2,
-      centerY: el.y - h / 2
+      centerY: el.y - (el.fontSize || 16) + h / 2
     };
   }
   if (el.type === 'pen' && el.points && el.points.length > 0) {
@@ -178,6 +182,14 @@ export default function BlackboardCanvas({
       if (e.code === 'Space' && !e.repeat && document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
         isSpacePressed.current = true;
         setIsSpacePressedState(true);
+      }
+      if (e.key === 'Enter' && selectedElementIds.length === 1 && !editingTextId && document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
+        const selectedEl = elements.find(el => el.id === selectedElementIds[0]);
+        if (selectedEl && selectedEl.type === 'text') {
+          e.preventDefault();
+          setEditingTextId(selectedEl.id);
+          return;
+        }
       }
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElementIds.length > 0 && document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
         onPushHistory();
@@ -480,10 +492,23 @@ export default function BlackboardCanvas({
 
     // 3. Text Tool
     if (activeTool === 'text') {
+      // Check if user clicked an existing text element to edit it
+      const clickedText = [...elements].reverse().find(el => {
+        if (el.type !== 'text') return false;
+        const b = getSingleElementBounds(el);
+        return coords.x >= b.minX - 6 && coords.x <= b.maxX + 6 && coords.y >= b.minY - 6 && coords.y <= b.maxY + 6;
+      });
+
+      if (clickedText) {
+        setSelectedElementIds([clickedText.id]);
+        setEditingTextId(clickedText.id);
+        return;
+      }
+
       const newText = {
         id: 'text_' + Date.now(),
         type: 'text',
-        text: 'Type text here...',
+        text: '', // Empty: "Type text here..." is only a guide/placeholder
         x: coords.x,
         y: coords.y,
         fontSize,
@@ -879,6 +904,28 @@ export default function BlackboardCanvas({
 
   const editingTextElement = elements.find(el => el.id === editingTextId);
 
+  // Double click handler to edit existing text
+  const handleDoubleClick = (e) => {
+    if (mode === 'view') return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+    const coords = screenToCanvas(screenX, screenY);
+
+    const clickedText = [...elements].reverse().find(el => {
+      if (el.type !== 'text') return false;
+      const b = getSingleElementBounds(el);
+      return coords.x >= b.minX - 8 && coords.x <= b.maxX + 8 && coords.y >= b.minY - 8 && coords.y <= b.maxY + 8;
+    });
+
+    if (clickedText) {
+      setSelectedElementIds([clickedText.id]);
+      setEditingTextId(clickedText.id);
+    }
+  };
+
   // Active cursor class determined by tool, view mode, space-drag, and rotate/move proximity
   const getActiveCursorClass = () => {
     if (mode === 'view' || isSpacePressedState) {
@@ -898,6 +945,7 @@ export default function BlackboardCanvas({
       ref={containerRef}
       onWheel={handleWheel}
       onPointerDown={handlePointerDown}
+      onDoubleClick={handleDoubleClick}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
@@ -915,13 +963,31 @@ export default function BlackboardCanvas({
         <textarea
           autoFocus
           value={editingTextElement.text}
+          placeholder="Type text here..."
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
           onChange={(e) => {
             const val = e.target.value;
             onChangeElements(elements.map(el => el.id === editingTextId ? { ...el, text: val } : el));
           }}
-          onBlur={() => setEditingTextId(null)}
+          onBlur={() => {
+            if (!editingTextElement.text || !editingTextElement.text.trim()) {
+              onChangeElements(elements.filter(el => el.id !== editingTextId));
+              setSelectedElementIds(prev => prev.filter(id => id !== editingTextId));
+            }
+            setEditingTextId(null);
+          }}
           onKeyDown={(e) => {
-            if (e.key === 'Escape') setEditingTextId(null);
+            e.stopPropagation();
+            if (e.key === 'Escape') {
+              if (!editingTextElement.text || !editingTextElement.text.trim()) {
+                onChangeElements(elements.filter(el => el.id !== editingTextId));
+                setSelectedElementIds(prev => prev.filter(id => id !== editingTextId));
+              }
+              setEditingTextId(null);
+            }
           }}
           style={{
             position: 'absolute',
@@ -932,14 +998,15 @@ export default function BlackboardCanvas({
             fontWeight: editingTextElement.bold ? 'bold' : 'normal',
             fontStyle: editingTextElement.italic ? 'italic' : 'normal',
             textDecoration: editingTextElement.strikethrough ? 'line-through' : 'none',
-            background: 'rgba(0,0,0,0.65)',
-            border: '1px dashed #9ca3af',
+            background: 'rgba(0,0,0,0.75)',
+            border: '1px dashed rgba(255, 255, 255, 0.45)',
             borderRadius: '6px',
             padding: '4px 8px',
             outline: 'none',
             resize: 'both',
-            zIndex: 30,
-            minWidth: '140px',
+            zIndex: 40,
+            minWidth: '160px',
+            minHeight: `${(editingTextElement.fontSize || 16) * viewTransform.scale * 1.8}px`,
             fontFamily: 'Inter, sans-serif'
           }}
         />

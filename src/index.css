@@ -35,6 +35,12 @@ html, body, #root {
   background: rgba(255, 255, 255, 0.25);
 }
 
+textarea::placeholder {
+  color: rgba(255, 255, 255, 0.45) !important;
+  font-style: italic;
+  font-weight: normal;
+}
+
 /* Translucent glossy chalkboard surface - 30% transparent (70% opacity) */
 .glossy-blackboard-bg {
   background-color: rgba(18, 20, 26, 0.70);
