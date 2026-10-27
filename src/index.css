@@ -1,0 +1,340 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+html, body, #root {
+  background: transparent !important;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #f3f4f6;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Translucent glossy chalkboard surface - 30% transparent (70% opacity) */
+.glossy-blackboard-bg {
+  background-color: rgba(18, 20, 26, 0.70);
+  background-image: 
+    linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.01) 32%, rgba(255, 255, 255, 0.03) 55%, rgba(0, 0, 0, 0.3) 100%),
+    radial-gradient(ellipse at 50% 0%, rgba(45, 52, 68, 0.3) 0%, rgba(15, 17, 22, 0.15) 100%);
+  backdrop-filter: blur(36px) saturate(180%);
+  -webkit-backdrop-filter: blur(36px) saturate(180%);
+  position: relative;
+}
+
+/* Background grid & dotted textures */
+.pattern-grid {
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.pattern-dotted {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.14) 1.5px, transparent 1.5px);
+  background-size: 28px 28px;
+}
+
+/* ==========================================================================
+   Awesome iOS Animation System (v5tech/awesome-ios-animation inspired)
+   Spring physics, fluid micro-interactions, elastic buttons, rubber-band toggles
+   ========================================================================== */
+
+/* Keyframe Animations */
+@keyframes iosSpringPop {
+  0% {
+    transform: scale(0.92);
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes iosModalSpring {
+  0% {
+    opacity: 0;
+    transform: scale(0.93) translateY(16px);
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1.015) translateY(-2px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes iosPopoverSpring {
+  0% {
+    opacity: 0;
+    transform: scale(0.88) translateY(-8px);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.025) translateY(1px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes iosTileSpawn {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.95);
+  }
+  65% {
+    opacity: 1;
+    transform: translateY(2px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Short Round Calm Tiles with iOS Spring Entrance */
+.calm-tile {
+  background: #0d0e12;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 12px;
+  animation: iosTileSpawn 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Tool Buttons inside Dock with iOS Tactile Press */
+.calm-tool-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  transform-origin: center center;
+}
+
+.calm-tool-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  transform: scale(1.08) translateY(-1px);
+}
+
+.calm-tool-btn:active {
+  transform: scale(0.88);
+  transition-duration: 0.08s;
+}
+
+/* Selected state: iOS spring pop with subtle highlight */
+.calm-tool-btn.active {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  animation: iosSpringPop 0.26s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Calm Attached Pull Tab - Located & Centered Just Below Tiles */
+.calm-pull-tab {
+  background: #0d0e12;
+  border-left: 1px solid rgba(255, 255, 255, 0.04);
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.calm-pull-tab:hover {
+  background: #181a22;
+  transform: scale(1.05);
+}
+
+.calm-pull-tab:active {
+  transform: scale(0.92);
+}
+
+/* Modal Panels with iOS Sheet Spring */
+.glossy-modal {
+  background: rgba(14, 16, 21, 0.95);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75);
+  border-radius: 14px;
+  animation: iosModalSpring 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transform-origin: center center;
+}
+
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+.animate-popover {
+  animation: iosPopoverSpring 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transform-origin: top center;
+}
+
+/* iOS Segmented Control with Elastic Spring Feedback */
+.segmented-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background-color: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.segmented-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #9ca3af;
+  border: 1px solid transparent;
+  transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+  cursor: pointer;
+  white-space: nowrap;
+  transform-origin: center center;
+}
+
+.segmented-btn:hover {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.07);
+  transform: scale(1.03);
+}
+
+.segmented-btn:active {
+  transform: scale(0.92);
+}
+
+.segmented-btn.active {
+  background-color: #2563eb;
+  color: #ffffff;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.35);
+  animation: iosSpringPop 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* iOS Elastic Rubber-band Toggle Switch */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #1a1c24;
+  transition: background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 2px;
+  bottom: 2px;
+  background-color: #94a3b8;
+  transition: transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+}
+/* iOS rubber-band stretch when holding down the switch */
+.switch:active .slider:before {
+  width: 24px;
+}
+input:checked + .slider {
+  background-color: #2563eb;
+  border-color: #3b82f6;
+}
+input:checked + .slider:before {
+  transform: translateX(20px);
+  background-color: #ffffff;
+}
+.switch:active input:checked + .slider:before {
+  transform: translateX(14px);
+}
+
+/* Canvas Inherits Parent Cursor */
+canvas {
+  cursor: inherit;
+}
+
+/* Hand Grab Cursors for Rotation */
+.cursor-hand-grab {
+  cursor: grab !important;
+  cursor: -webkit-grab !important;
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='%23ffffff' stroke='%23000000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 11V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v4'/%3E%3Cpath d='M14 10V4a2 2 0 0 0-2-2 2 2 0 0 0-2 2v6'/%3E%3Cpath d='M10 10.5V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v8'/%3E%3Cpath d='M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15'/%3E%3C/svg%3E") 10 10, grab !important;
+}
+
+.cursor-hand-grabbing {
+  cursor: grabbing !important;
+  cursor: -webkit-grabbing !important;
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='%23ffffff' stroke='%23000000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 11V8a2 2 0 0 0-2-2 2 2 0 0 0-2 2v3'/%3E%3Cpath d='M14 10V8a2 2 0 0 0-2-2 2 2 0 0 0-2 2v2'/%3E%3Cpath d='M10 11V9a2 2 0 0 0-2-2 2 2 0 0 0-2 2v4'/%3E%3Cpath d='M18 11a2 2 0 0 1 4 0v4a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-2.6-2.6a2 2 0 0 1 2.83-2.82L8 16'/%3E%3C/svg%3E") 10 10, grabbing !important;
+}
+
+.cursor-move {
+  cursor: move !important;
+}
+
+.cursor-crosshair {
+  cursor: crosshair !important;
+}
+
+.cursor-default {
+  cursor: default !important;
+}
