@@ -2,11 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
-// Ensure single instance lock
-const gotTheLock = app.requestSingleInstanceLock();
-if (!gotTheLock) {
-  app.quit();
-}
+
 
 let mainWindow = null;
 let isMinitab = false;
@@ -59,12 +55,7 @@ function createWindow() {
   });
 }
 
-app.on('second-instance', () => {
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-  }
-});
+
 
 app.whenReady().then(() => {
   createWindow();
