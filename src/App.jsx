@@ -13,6 +13,7 @@ import {
   loadSettings,
   saveSettings,
   saveCurrentBoard,
+  clearCurrentBoard,
   loadCurrentBoard,
   createMilestoneSnapshot
 } from './utils/storage';
@@ -34,6 +35,7 @@ export default function App() {
   const patternRef = useRef('blank');
   const isDirtyRef = useRef(false);
   const isInitialMount = useRef(true);
+  const isDiscardingRef = useRef(false);
 
   // Settings State
   const [settings, setSettings] = useState(loadSettings);
@@ -106,6 +108,12 @@ export default function App() {
         setIsDirty(true);
         isDirtyRef.current = true;
       }
+    } else {
+      setElements([]);
+      setTitle('Untitled');
+      setPattern('blank');
+      setIsDirty(false);
+      isDirtyRef.current = false;
     }
     const timer = setTimeout(() => {
       isInitialMount.current = false;
@@ -124,7 +132,9 @@ export default function App() {
 
   // Continuous live draft saving: persists after every change so crash or sudden PC shutdown never loses work
   useEffect(() => {
+    if (isDiscardingRef.current) return;
     const timer = setTimeout(() => {
+      if (isDiscardingRef.current) return;
       if (elements.length > 0 || title !== 'Untitled' || pattern !== 'blank') {
         saveCurrentBoard({
           title,
@@ -141,6 +151,7 @@ export default function App() {
   // Emergency draft flush on beforeunload / pagehide (crash & PC shutdown resilience)
   useEffect(() => {
     const handleEmergencyFlush = () => {
+      if (isDiscardingRef.current) return;
       const curElements = elementsRef.current;
       const curTitle = titleRef.current;
       const curPattern = patternRef.current;
@@ -272,15 +283,17 @@ export default function App() {
   };
 
   const handleDiscardAndClose = () => {
-    // Clear draft so discarded changes are not restored next time
-    saveCurrentBoard({
-      title: 'Untitled',
-      elements: [],
-      pattern: 'blank',
-      isDirty: false
-    });
-    setIsDirty(false);
+    // Explicit discard: mark flag to prevent emergency beforeunload save, wipe storage
+    isDiscardingRef.current = true;
+    elementsRef.current = [];
+    titleRef.current = 'Untitled';
+    patternRef.current = 'blank';
     isDirtyRef.current = false;
+    clearCurrentBoard();
+    setElements([]);
+    setTitle('Untitled');
+    setPattern('blank');
+    setIsDirty(false);
     setShowCloseModal(false);
     forceExitApp();
   };

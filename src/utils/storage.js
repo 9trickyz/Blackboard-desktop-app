@@ -89,6 +89,14 @@ export function saveCurrentBoard(boardData) {
   }
 }
 
+export function clearCurrentBoard() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch (e) {
+    console.warn('LocalStorage clear failed:', e);
+  }
+}
+
 export function loadCurrentBoard() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
