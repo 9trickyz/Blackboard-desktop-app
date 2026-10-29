@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -81,6 +81,7 @@ if (!gotTheLock) {
       backgroundColor: '#00000000',
       hasShadow: true,
       titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+      alwaysOnTop: false,
       webPreferences: {
         preload: path.join(__dirname, 'preload.cjs'),
         nodeIntegration: false,
@@ -189,6 +190,18 @@ ipcMain.on('window-always-on-top', (_event, flag) => {
   if (mainWindow) {
     mainWindow.setAlwaysOnTop(Boolean(flag));
   }
+});
+
+ipcMain.handle('read-clipboard-image', () => {
+  try {
+    const img = clipboard.readImage();
+    if (img && !img.isEmpty()) {
+      return img.toDataURL();
+    }
+  } catch (err) {
+    console.error('Failed to read clipboard image:', err);
+  }
+  return null;
 });
 
 ipcMain.handle('get-initial-file', () => {

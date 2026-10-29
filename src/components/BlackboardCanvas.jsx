@@ -352,10 +352,15 @@ export default function BlackboardCanvas({
 
   // Sync zoomLevel
   useEffect(() => {
-    setViewTransform(prev => ({
-      ...prev,
-      scale: zoomLevel
-    }));
+    setViewTransform(prev => {
+      if (zoomLevel === 1 && prev.scale !== 1) {
+        return { x: 0, y: 0, scale: 1 };
+      }
+      return {
+        ...prev,
+        scale: zoomLevel
+      };
+    });
   }, [zoomLevel]);
 
   // Keyboard Shortcuts: Delete, Space pan
@@ -1294,6 +1299,36 @@ export default function BlackboardCanvas({
     return 'cursor-crosshair';
   };
 
+  // Dynamic Pattern Style: dynamically moves with panning (viewTransform.x, y) and scales with zoom
+  const getDynamicPatternStyle = () => {
+    if (pattern === 'blank') return {};
+    const scale = viewTransform.scale;
+    const posX = viewTransform.x;
+    const posY = viewTransform.y;
+
+    if (pattern === 'grid') {
+      const gridSize = 32 * scale;
+      const lineWidth = Math.max(1, Math.min(2, scale));
+      return {
+        backgroundImage: `linear-gradient(to right, rgba(255, 255, 255, 0.06) ${lineWidth}px, transparent ${lineWidth}px), linear-gradient(to bottom, rgba(255, 255, 255, 0.06) ${lineWidth}px, transparent ${lineWidth}px)`,
+        backgroundSize: `${gridSize}px ${gridSize}px`,
+        backgroundPosition: `${posX}px ${posY}px`
+      };
+    }
+
+    if (pattern === 'dotted') {
+      const dotSpacing = 28 * scale;
+      const dotRadius = Math.max(1, 1.5 * scale);
+      return {
+        backgroundImage: `radial-gradient(rgba(255, 255, 255, 0.14) ${dotRadius}px, transparent ${dotRadius}px)`,
+        backgroundSize: `${dotSpacing}px ${dotSpacing}px`,
+        backgroundPosition: `${posX}px ${posY}px`
+      };
+    }
+
+    return {};
+  };
+
   return (
     <div
       ref={containerRef}
@@ -1303,10 +1338,16 @@ export default function BlackboardCanvas({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
-      className={`relative w-full h-full overflow-hidden select-none bg-transparent ${getActiveCursorClass()} ${
-        pattern === 'grid' ? 'pattern-grid' : pattern === 'dotted' ? 'pattern-dotted' : ''
-      }`}
+      className={`relative w-full h-full overflow-hidden select-none bg-transparent ${getActiveCursorClass()}`}
     >
+      {/* Dynamic Pan & Zoom Pattern Background Layer */}
+      {pattern !== 'blank' && (
+        <div
+          className="absolute inset-0 pointer-events-none transition-none"
+          style={getDynamicPatternStyle()}
+        />
+      )}
+
       <canvas
         ref={canvasRef}
         className={`absolute inset-0 w-full h-full block ${getActiveCursorClass()}`}

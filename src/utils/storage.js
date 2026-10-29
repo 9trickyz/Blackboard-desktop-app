@@ -42,12 +42,13 @@ export function loadSettings() {
     const raw = localStorage.getItem(SETTINGS_KEY);
 
     if (!isV2) {
-      // First time booting with v2 settings: guarantee Ink-to-Shape features are disabled
+      // First time booting with v2 settings: guarantee Ink-to-Shape features are disabled & pinOnTop is false
       localStorage.setItem(INIT_FLAG_KEY, 'true');
       const base = raw ? JSON.parse(raw) : {};
       const updated = {
         ...defaultSettings,
         ...base,
+        pinOnTop: false,
         inkToShape: {
           enabled: false,
           delayMs: 500,
@@ -61,7 +62,8 @@ export function loadSettings() {
 
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { ...defaultSettings, ...parsed };
+      // Sit on top feature is automatically off when opening the app
+      return { ...defaultSettings, ...parsed, pinOnTop: false };
     }
   } catch (e) {
     console.error('Failed to load settings:', e);

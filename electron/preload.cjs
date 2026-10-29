@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('app-close-requested', (_event) => callback());
   },
   setAlwaysOnTop: (flag) => ipcRenderer.send('window-always-on-top', flag),
+  readClipboardImage: () => ipcRenderer.invoke('read-clipboard-image'),
   saveFile: (data) => ipcRenderer.invoke('save-file-dialog', data),
   openFile: () => ipcRenderer.invoke('open-file-dialog'),
   getInitialFile: () => ipcRenderer.invoke('get-initial-file'),

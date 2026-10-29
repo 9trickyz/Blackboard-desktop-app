@@ -37,6 +37,7 @@ export default function App() {
   const isDirtyRef = useRef(false);
   const isInitialMount = useRef(true);
   const isDiscardingRef = useRef(false);
+  const hasSavedToFileRef = useRef(false);
 
   // Settings State
   const [settings, setSettings] = useState(loadSettings);
@@ -117,6 +118,7 @@ export default function App() {
         setPattern(parsed.pattern || 'blank');
         setIsDirty(false);
         isDirtyRef.current = false;
+        hasSavedToFileRef.current = true;
 
         saveCurrentBoard({
           title: boardTitle || 'Untitled',
@@ -135,21 +137,28 @@ export default function App() {
 
   // Load initial board or crash / shutdown draft from offline cache
   useEffect(() => {
+    // Ensure sit on top feature is automatically OFF when opening the app
+    if (window.electronAPI && window.electronAPI.setAlwaysOnTop) {
+      window.electronAPI.setAlwaysOnTop(false);
+    }
+
     const saved = loadCurrentBoard();
     if (saved && saved.elements && saved.elements.length > 0) {
       setElements(hydrateElements(saved.elements));
       if (saved.title) setTitle(saved.title);
       if (saved.pattern) setPattern(saved.pattern);
-      if (saved.isDirty) {
-        setIsDirty(true);
-        isDirtyRef.current = true;
-      }
+      // Draft restored from cache: mark dirty and unsaved to disk so closing prompts "save changes"
+      setIsDirty(true);
+      isDirtyRef.current = true;
+      hasSavedToFileRef.current = false;
     } else {
       setElements([]);
       setTitle('Untitled');
       setPattern('blank');
       setIsDirty(false);
       isDirtyRef.current = false;
+      hasSavedToFileRef.current = false;
+      clearCurrentBoard();
     }
     const timer = setTimeout(() => {
       isInitialMount.current = false;
@@ -190,7 +199,7 @@ export default function App() {
     if (isDiscardingRef.current) return;
     const timer = setTimeout(() => {
       if (isDiscardingRef.current) return;
-      if (elements.length > 0 || title !== 'Untitled' || pattern !== 'blank') {
+      if (elements.length > 0) {
         saveCurrentBoard({
           title,
           elements,
@@ -198,8 +207,13 @@ export default function App() {
           isDirty: isDirtyRef.current,
           timestamp: Date.now()
         });
+      } else {
+        // Elements were deleted / empty: wipe draft from storage so reopening won't bring it back
+        clearCurrentBoard();
+        setIsDirty(false);
+        isDirtyRef.current = false;
       }
-    }, 300);
+    }, 200);
     return () => clearTimeout(timer);
   }, [title, elements, pattern]);
 
@@ -210,7 +224,7 @@ export default function App() {
       const curElements = elementsRef.current;
       const curTitle = titleRef.current;
       const curPattern = patternRef.current;
-      if (curElements.length > 0 || curTitle !== 'Untitled' || curPattern !== 'blank') {
+      if (curElements.length > 0) {
         saveCurrentBoard({
           title: curTitle,
           elements: curElements,
@@ -222,6 +236,8 @@ export default function App() {
           { title: curTitle, elements: curElements, pattern: curPattern },
           'Crash / Shutdown Draft'
         );
+      } else {
+        clearCurrentBoard();
       }
     };
 
@@ -279,6 +295,7 @@ export default function App() {
       if (res && res.success) {
         setIsDirty(false);
         isDirtyRef.current = false;
+        hasSavedToFileRef.current = true;
         saveCurrentBoard({
           title: curTitle,
           elements: sanitizeElementsForSave(curElements),
@@ -299,6 +316,7 @@ export default function App() {
       URL.revokeObjectURL(url);
       setIsDirty(false);
       isDirtyRef.current = false;
+      hasSavedToFileRef.current = true;
       saveCurrentBoard({
         title: curTitle,
         elements: curElements,
@@ -321,11 +339,19 @@ export default function App() {
   };
 
   const handleRequestClose = useCallback(() => {
-    const hasProgress = elementsRef.current.length > 0 && isDirtyRef.current;
-    if (!hasProgress) {
+    // If board is empty (or draft was deleted), ensure storage is clean and exit immediately without prompt
+    if (elementsRef.current.length === 0) {
+      clearCurrentBoard();
       forceExitApp();
-    } else {
+      return;
+    }
+
+    // Prompt to save changes if there are unsaved elements on the board
+    const hasUnsavedProgress = isDirtyRef.current || !hasSavedToFileRef.current;
+    if (hasUnsavedProgress) {
       setShowCloseModal(true);
+    } else {
+      forceExitApp();
     }
   }, []);
 
@@ -382,6 +408,20 @@ export default function App() {
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
         e.preventDefault();
         handleRedo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+        const activeTag = document.activeElement?.tagName;
+        if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
+          if (window.electronAPI && window.electronAPI.readClipboardImage) {
+            window.electronAPI.readClipboardImage().then(dataUrl => {
+              if (dataUrl && dataUrl.startsWith('data:image/')) {
+                if (Date.now() - lastPasteTimeRef.current > 300) {
+                  lastPasteTimeRef.current = Date.now();
+                  insertImageFromDataUrl(dataUrl);
+                }
+              }
+            });
+          }
+        }
       } else if (e.key === 'v' || e.key === 'V') {
         setMode(prev => prev === 'view' ? 'edit' : 'view');
       } else if (e.key === 'Escape') {
@@ -465,7 +505,8 @@ export default function App() {
         setPattern('blank');
         setIsDirty(false);
         isDirtyRef.current = false;
-        saveCurrentBoard({ title: 'Untitled', elements: [], pattern: 'blank', isDirty: false });
+        hasSavedToFileRef.current = false;
+        clearCurrentBoard();
       }
     } else {
       pushHistory();
@@ -474,6 +515,8 @@ export default function App() {
       setPattern('blank');
       setIsDirty(false);
       isDirtyRef.current = false;
+      hasSavedToFileRef.current = false;
+      clearCurrentBoard();
     }
   };
 
@@ -500,6 +543,128 @@ export default function App() {
     }
   };
 
+  // Helper to insert an image into the board (used by Upload, Drag-and-Drop, and Automatic Clipboard Paste)
+  const insertImageFromDataUrl = useCallback((dataUrl, initialPos) => {
+    if (!dataUrl) return;
+    const img = new Image();
+    img.onload = () => {
+      const maxDim = 500;
+      let w = img.width || 400;
+      let h = img.height || 300;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) {
+          h = (h / w) * maxDim;
+          w = maxDim;
+        } else {
+          w = (w / h) * maxDim;
+          h = maxDim;
+        }
+      }
+
+      let posX = initialPos?.x;
+      let posY = initialPos?.y;
+      if (posX === undefined || posY === undefined) {
+        const vw = window.innerWidth || 1200;
+        const vh = window.innerHeight || 800;
+        posX = Math.max(40, Math.round((vw - w) / 2));
+        posY = Math.max(60, Math.round((vh - h) / 2));
+      }
+
+      const newImgEl = {
+        id: 'img_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+        type: 'image',
+        src: dataUrl,
+        imgElement: img,
+        x: posX,
+        y: posY,
+        width: Math.round(w),
+        height: Math.round(h),
+        opacity: 100
+      };
+
+      pushHistory();
+      setElements(prev => [...prev, newImgEl]);
+      setActiveTool('select');
+      setIsDirty(true);
+      isDirtyRef.current = true;
+    };
+    img.src = dataUrl;
+  }, [pushHistory]);
+
+  const insertImageFromFile = useCallback((file, initialPos) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      insertImageFromDataUrl(event.target.result, initialPos);
+    };
+    reader.readAsDataURL(file);
+  }, [insertImageFromDataUrl]);
+
+  // Automatic Clipboard Image Paste (Ctrl+V / Cmd+V / System Paste)
+  const lastPasteTimeRef = useRef(0);
+  useEffect(() => {
+    const processClipboardData = async (e) => {
+      const activeEl = document.activeElement;
+      const isInput = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+
+      const clipboardData = e.clipboardData || window.clipboardData;
+      let handledImage = false;
+
+      if (clipboardData) {
+        // 1. Check clipboard items for image blobs (e.g. Snipping tool, screenshots, browser copied image)
+        if (clipboardData.items) {
+          for (let i = 0; i < clipboardData.items.length; i++) {
+            const item = clipboardData.items[i];
+            if (item.type && item.type.startsWith('image/')) {
+              const file = item.getAsFile();
+              if (file) {
+                e.preventDefault();
+                lastPasteTimeRef.current = Date.now();
+                insertImageFromFile(file);
+                handledImage = true;
+                break;
+              }
+            }
+          }
+        }
+
+        // 2. Check clipboard files (e.g. copied image file from file explorer)
+        if (!handledImage && clipboardData.files && clipboardData.files.length > 0) {
+          for (let i = 0; i < clipboardData.files.length; i++) {
+            const file = clipboardData.files[i];
+            if (file.type && file.type.startsWith('image/')) {
+              e.preventDefault();
+              lastPasteTimeRef.current = Date.now();
+              insertImageFromFile(file);
+              handledImage = true;
+              break;
+            }
+          }
+        }
+      }
+
+      // 3. Fallback to native Electron clipboard image if DOM clipboard doesn't contain image
+      if (!handledImage && !isInput && window.electronAPI && window.electronAPI.readClipboardImage) {
+        try {
+          const dataUrl = await window.electronAPI.readClipboardImage();
+          if (dataUrl && dataUrl.startsWith('data:image/')) {
+            if (Date.now() - lastPasteTimeRef.current > 300) {
+              e.preventDefault();
+              lastPasteTimeRef.current = Date.now();
+              insertImageFromDataUrl(dataUrl);
+              handledImage = true;
+            }
+          }
+        } catch (err) {
+          console.error('Failed to read native clipboard image:', err);
+        }
+      }
+    };
+
+    window.addEventListener('paste', processClipboardData);
+    return () => window.removeEventListener('paste', processClipboardData);
+  }, [insertImageFromFile, insertImageFromDataUrl]);
+
   // Image Upload Tool
   const handleTriggerImageUpload = () => {
     imageUploadRef.current && imageUploadRef.current.click();
@@ -508,40 +673,8 @@ export default function App() {
   const handleImageUpload = (e) => {
     const file = e.target.files && e.target.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.onload = () => {
-          const maxDim = 500;
-          let w = img.width;
-          let h = img.height;
-          if (w > maxDim || h > maxDim) {
-            if (w > h) {
-              h = (h / w) * maxDim;
-              w = maxDim;
-            } else {
-              w = (w / h) * maxDim;
-              h = maxDim;
-            }
-          }
-          const newImgEl = {
-            id: 'img_' + Date.now(),
-            type: 'image',
-            src: event.target.result,
-            imgElement: img,
-            x: 200,
-            y: 150,
-            width: w,
-            height: h,
-            opacity: 100
-          };
-          pushHistory();
-          setElements(prev => [...prev, newImgEl]);
-          setActiveTool('select');
-        };
-        img.src = event.target.result;
-      };
-      reader.readAsDataURL(file);
+      insertImageFromFile(file);
+      e.target.value = '';
     }
   };
 
@@ -613,40 +746,7 @@ export default function App() {
       };
       reader.readAsText(file);
     } else if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const img = new Image();
-        img.onload = () => {
-          const maxDim = 500;
-          let w = img.width;
-          let h = img.height;
-          if (w > maxDim || h > maxDim) {
-            if (w > h) {
-              h = (h / w) * maxDim;
-              w = maxDim;
-            } else {
-              w = (w / h) * maxDim;
-              h = maxDim;
-            }
-          }
-          const newImgEl = {
-            id: 'img_' + Date.now(),
-            type: 'image',
-            src: event.target.result,
-            imgElement: img,
-            x: 200,
-            y: 150,
-            width: w,
-            height: h,
-            opacity: 100
-          };
-          pushHistory();
-          setElements(prev => [...prev, newImgEl]);
-          setActiveTool('select');
-        };
-        img.src = event.target.result;
-      };
-      reader.readAsDataURL(file);
+      insertImageFromFile(file, { x: e.clientX, y: e.clientY });
     }
   };
 
