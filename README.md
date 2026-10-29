@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v1.0.0-007acc?style=flat" alt="Version" />
+  <img src="https://img.shields.io/badge/version-v1.0.5-007acc?style=flat" alt="Version" />
   <img src="https://img.shields.io/badge/Windows-10%2F11-0078d4?style=flat&logo=windows&logoColor=white" alt="Windows" />
   <img src="https://img.shields.io/badge/macOS-12%2B-000000?style=flat&logo=apple&logoColor=white" alt="macOS" />
   <img src="https://img.shields.io/badge/Linux-AppImage%20%7C%20deb%20%7C%20rpm-FCC624?style=flat&logo=linux&logoColor=black" alt="Linux" />

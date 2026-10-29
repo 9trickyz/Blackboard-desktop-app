@@ -1,7 +1,7 @@
 {
   "name": "blackboard-desktop",
   "productName": "Blackboard",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "description": "Minimal dark glossy cross-platform blackboard desktop app",
   "main": "electron/main.cjs",
   "scripts": {

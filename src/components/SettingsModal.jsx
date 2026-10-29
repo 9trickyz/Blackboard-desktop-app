@@ -91,7 +91,7 @@ export default function SettingsModal({
 
           {/* Bottom Sidebar Info */}
           <div className="pt-4 border-t border-white/[0.04] flex items-center justify-between text-[11px] text-slate-500 font-mono">
-            <span>Version 1.0.0</span>
+            <span>Version 1.0.5</span>
             <span className="px-2 py-0.5 rounded bg-white/[0.04] text-[10px] text-slate-400">
               Desktop
             </span>
