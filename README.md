@@ -48,7 +48,7 @@
 - **Right Dock**: Zoom In (`PlusIcon.png`), Zoom Out (`MinusIcon.png`), and direct reset zoom to 100%.
 - **Hide Tile Feature** (Page 11): Click the chevron underneath any dock (`arrowUp.png` / `Arrowdown.png`) to collapse it into a minimal pill, keeping your drawing area completely unobstructed.
 
-### 3. Tool Popovers (Pages 4–10)
+### 3. Tool Popovers
 - **Text Tool Popover**: Color wheel circle, font size adjuster (default 12), Italics (`ItalicIcon.png` / `ItalicIconFILL.png`), Bold (`BoldIcon.png` / `BoldIconFILL.png`), and Strikethrough (`StrikethroughIcon.png` / `StrikethroughIconFILL.png`).
 - **Shape Tool Popover**: Square / Rectangle, Circle, Triangle, Rounded Rectangle, Star, Heart, and Arrow.
 - **Pen & Line Tool Popovers**: Color wheel circle, Stroke Weight (`StrokeWeightIcon.png`, default 12), and Transparency (`TransparencyIcon.png`, default 100%).
@@ -61,7 +61,7 @@
   - **"More >>" Expandable Panel**: Precision HEX input and numeric R, G, B channel controls.
   - **Palette Swatches**: 20 preset grayscale and vivid rainbow swatches, plus "+ Add Custom" swatch button.
 
-### 5. Settings Modal (5 Slots - Guide Page 3)
+### 5. Settings Modal
 1. **Export Defaults & Asset Rendering**:
    - Default format: PNG, SVG, or PDF.
    - Transparent background toggle.
