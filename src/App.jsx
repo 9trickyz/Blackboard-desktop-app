@@ -66,6 +66,7 @@ export default function App() {
   const [isBold, setIsBold] = useState(false);
   const [isItalic, setIsItalic] = useState(false);
   const [isStrikethrough, setIsStrikethrough] = useState(false);
+  const [textAlign, setTextAlign] = useState('left'); // 'left' | 'center' | 'right'
 
   // Popover State
   const [openPopover, setOpenPopover] = useState(null);
@@ -829,6 +830,8 @@ export default function App() {
         onToggleBold={() => setIsBold(!isBold)}
         isStrikethrough={isStrikethrough}
         onToggleStrikethrough={() => setIsStrikethrough(!isStrikethrough)}
+        textAlign={textAlign}
+        onChangeAlign={setTextAlign}
       />
 
       <ShapePopover
@@ -870,6 +873,8 @@ export default function App() {
           isBold={isBold}
           isItalic={isItalic}
           isStrikethrough={isStrikethrough}
+          textAlign={textAlign}
+          onChangeAlign={setTextAlign}
           pattern={pattern}
           settings={settings}
           zoomLevel={zoomLevel}

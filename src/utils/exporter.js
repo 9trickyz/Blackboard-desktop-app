@@ -1,5 +1,78 @@
 import { jsPDF } from 'jspdf';
 
+let measureCanvas = null;
+let measureCtx = null;
+
+export function getWrappedTextLines(text, fontSize = 16, fontStyleStr = '', maxWidth = null) {
+  if (!text) return [];
+  if (!maxWidth || maxWidth <= 0) {
+    return text.split('\n');
+  }
+  if (typeof document !== 'undefined') {
+    if (!measureCanvas) {
+      measureCanvas = document.createElement('canvas');
+      measureCtx = measureCanvas.getContext('2d');
+    }
+    measureCtx.font = fontStyleStr || `${fontSize}px Inter, sans-serif`;
+  }
+
+  const rawParagraphs = text.split('\n');
+  const result = [];
+
+  for (const para of rawParagraphs) {
+    if (!para) {
+      result.push('');
+      continue;
+    }
+    const words = para.split(' ');
+    let currentLine = '';
+
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      const testLine = currentLine ? currentLine + ' ' + word : word;
+      let testWidth = 0;
+      if (measureCtx) {
+        testWidth = measureCtx.measureText(testLine).width;
+      } else {
+        testWidth = testLine.length * fontSize * 0.6;
+      }
+
+      if (testWidth <= maxWidth || !currentLine) {
+        // If a single word on its own is wider than maxWidth, break it into chunks
+        if (!currentLine && testWidth > maxWidth && word.length > 1) {
+          let remaining = word;
+          while (remaining.length > 0) {
+            let chunk = '';
+            for (let c = 0; c < remaining.length; c++) {
+              const testChunk = chunk + remaining[c];
+              const w = measureCtx ? measureCtx.measureText(testChunk).width : testChunk.length * fontSize * 0.6;
+              if (w > maxWidth && chunk.length > 0) break;
+              chunk = testChunk;
+            }
+            if (chunk.length < remaining.length) {
+              result.push(chunk);
+              remaining = remaining.slice(chunk.length);
+            } else {
+              currentLine = chunk;
+              break;
+            }
+          }
+        } else {
+          currentLine = testLine;
+        }
+      } else {
+        result.push(currentLine);
+        currentLine = word;
+      }
+    }
+    if (currentLine) {
+      result.push(currentLine);
+    }
+  }
+
+  return result.length > 0 ? result : [''];
+}
+
 export function getElementsBoundingBox(elements, fallbackWidth = 1200, fallbackHeight = 800) {
   if (!elements || elements.length === 0) {
     return { minX: 0, minY: 0, maxX: fallbackWidth, maxY: fallbackHeight, width: fallbackWidth, height: fallbackHeight };
@@ -28,12 +101,31 @@ export function getElementsBoundingBox(elements, fallbackWidth = 1200, fallbackH
       if (el.y1 < minY) minY = el.y1;
       if (el.y2 > maxY) maxY = y2;
     } else if (el.type === 'text') {
-      const approxWidth = Math.max(80, (el.text || '').length * (el.fontSize || 16) * 0.6);
-      const approxHeight = (el.fontSize || 16) * 1.5;
+      const fontSize = el.fontSize || 16;
+      const fontStyle = el.italic ? 'italic ' : '';
+      const fontWeight = el.bold ? 'bold ' : 'normal ';
+      const font = `${fontStyle}${fontWeight}${fontSize}px Inter, sans-serif`;
+      const lines = getWrappedTextLines(el.text, fontSize, font, el.width);
+      let maxLineWidth = 0;
+      if (typeof document !== 'undefined') {
+        if (!measureCanvas) {
+          measureCanvas = document.createElement('canvas');
+          measureCtx = measureCanvas.getContext('2d');
+        }
+        measureCtx.font = font;
+        for (const l of lines) {
+          const w = measureCtx.measureText(l).width;
+          if (w > maxLineWidth) maxLineWidth = w;
+        }
+      } else {
+        maxLineWidth = Math.max(...lines.map(l => l.length * fontSize * 0.62), 60);
+      }
+      const boxWidth = el.width ? Math.max(el.width, 60) : Math.max(maxLineWidth, 60);
+      const approxHeight = Math.max(1, lines.length) * fontSize * 1.35;
       if (el.x < minX) minX = el.x;
-      if (el.x + approxWidth > maxX) maxX = el.x + approxWidth;
-      if (el.y - approxHeight < minY) minY = el.y - approxHeight;
-      if (el.y > maxY) maxY = el.y;
+      if (el.x + boxWidth > maxX) maxX = el.x + boxWidth;
+      if (el.y - fontSize < minY) minY = el.y - fontSize;
+      if (el.y - fontSize + approxHeight > maxY) maxY = el.y - fontSize + approxHeight;
     } else if (el.type === 'image') {
       if (el.x < minX) minX = el.x;
       if (el.x + el.width > maxX) maxX = el.x + el.width;
@@ -257,10 +349,20 @@ export function drawTextToContext(ctx, el) {
   const fontSize = el.fontSize || 16;
   ctx.font = `${fontStyle}${fontWeight}${fontSize}px Inter, sans-serif`;
 
+  const lines = getWrappedTextLines(el.text, fontSize, ctx.font, el.width);
+  const lineHeight = fontSize * 1.35;
+  const totalHeight = Math.max(1, lines.length) * lineHeight;
+
+  let maxLineWidth = 0;
+  for (const l of lines) {
+    const w = ctx.measureText(l).width;
+    if (w > maxLineWidth) maxLineWidth = w;
+  }
+  const boxWidth = el.width ? Math.max(el.width, 60) : Math.max(maxLineWidth, 60);
+
   if (el.rotation) {
-    const textWidth = ctx.measureText(el.text || '').width || 80;
-    const cx = el.x + textWidth / 2;
-    const cy = el.y - fontSize * 0.4;
+    const cx = el.x + boxWidth / 2;
+    const cy = el.y - fontSize + totalHeight / 2;
     ctx.translate(cx, cy);
     ctx.rotate(el.rotation);
     ctx.translate(-cx, -cy);
@@ -269,19 +371,25 @@ export function drawTextToContext(ctx, el) {
   ctx.fillStyle = el.color || '#ffffff';
   ctx.globalAlpha = (el.opacity !== undefined ? el.opacity : 100) / 100;
 
-  const lines = (el.text || '').split('\n');
-  const lineHeight = fontSize * 1.35;
+  const align = el.align || 'left';
+
   for (let i = 0; i < lines.length; i++) {
     const lineY = el.y + i * lineHeight;
-    ctx.fillText(lines[i], el.x, lineY);
+    const lineWidth = ctx.measureText(lines[i]).width;
+    let lineX = el.x;
+    if (align === 'center') {
+      lineX = el.x + (boxWidth - lineWidth) / 2;
+    } else if (align === 'right') {
+      lineX = el.x + (boxWidth - lineWidth);
+    }
+    ctx.fillText(lines[i], lineX, lineY);
 
     if (el.strikethrough) {
-      const textWidth = ctx.measureText(lines[i]).width;
       ctx.beginPath();
       ctx.strokeStyle = el.color || '#ffffff';
       ctx.lineWidth = Math.max(1.5, fontSize / 12);
-      ctx.moveTo(el.x, lineY - fontSize * 0.35);
-      ctx.lineTo(el.x + textWidth, lineY - fontSize * 0.35);
+      ctx.moveTo(lineX, lineY - fontSize * 0.35);
+      ctx.lineTo(lineX + lineWidth, lineY - fontSize * 0.35);
       ctx.stroke();
     }
   }
@@ -378,7 +486,23 @@ export async function exportBoard({ elements, exportSettings, viewTransform, can
         }
         svgContent += `  <path d="${d}" fill="none" stroke="${el.strokeColor || '#fff'}" stroke-width="${el.strokeWidth || 4}" stroke-linecap="round" stroke-linejoin="round" opacity="${(el.opacity || 100) / 100}"/>\n`;
       } else if (el.type === 'text') {
-        svgContent += `  <text x="${el.x}" y="${el.y}" fill="${el.color || '#fff'}" font-size="${el.fontSize || 16}" font-family="Inter, sans-serif" opacity="${(el.opacity || 100) / 100}"${rotAttr}>${el.text}</text>\n`;
+        const fontSize = el.fontSize || 16;
+        const fontStyle = el.italic ? 'italic ' : '';
+        const fontWeight = el.bold ? 'bold ' : 'normal ';
+        const font = `${fontStyle}${fontWeight}${fontSize}px Inter, sans-serif`;
+        const lines = getWrappedTextLines(el.text, fontSize, font, el.width);
+        const lineHeight = fontSize * 1.35;
+        const boxWidth = el.width || 60;
+        const align = el.align || 'left';
+        const anchor = align === 'center' ? 'middle' : align === 'right' ? 'end' : 'start';
+        const textX = align === 'center' ? el.x + boxWidth / 2 : align === 'right' ? el.x + boxWidth : el.x;
+
+        const escapeXml = (str) => (str || '').replace(/[<>&'"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '\'': '&apos;', '"': '&quot;' }[c]));
+        svgContent += `  <text x="${textX}" y="${el.y}" text-anchor="${anchor}" fill="${el.color || '#fff'}" font-size="${fontSize}" font-family="Inter, sans-serif" opacity="${(el.opacity || 100) / 100}"${rotAttr}>\n`;
+        lines.forEach((line, idx) => {
+          svgContent += `    <tspan x="${textX}" dy="${idx === 0 ? 0 : lineHeight}">${escapeXml(line)}</tspan>\n`;
+        });
+        svgContent += `  </text>\n`;
       }
     }
     svgContent += `</svg>`;

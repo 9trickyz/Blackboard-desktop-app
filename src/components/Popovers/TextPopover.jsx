@@ -12,7 +12,9 @@ export default function TextPopover({
   isBold,
   onToggleBold,
   isStrikethrough,
-  onToggleStrikethrough
+  onToggleStrikethrough,
+  textAlign = 'left',
+  onChangeAlign
 }) {
   if (!isOpen) return null;
 
@@ -58,6 +60,46 @@ export default function TextPopover({
               className="text-[10px] text-gray-400 hover:text-white leading-none px-1 rounded cursor-pointer hover:scale-110 active:scale-90 transition-transform"
             >
               ▼
+            </button>
+          </div>
+        </div>
+
+        {/* Alignment Segmented Control */}
+        <div className="flex items-center justify-between p-1.5 rounded-md hover:bg-white/[0.06] transition text-xs font-semibold text-gray-200">
+          <span>Alignment</span>
+          <div className="flex items-center gap-0.5 bg-black/60 p-0.5 rounded border border-white/[0.08]">
+            <button
+              onClick={() => onChangeAlign && onChangeAlign('left')}
+              className={`p-1 rounded cursor-pointer transition ${
+                textAlign === 'left' ? 'bg-white/20 text-white shadow-sm' : 'text-gray-400 hover:text-white'
+              }`}
+              title="Align Left"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 4h18v2H3V4zm0 5h12v2H3V9zm0 5h18v2H3v-2zm0 5h12v2H3v-2z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => onChangeAlign && onChangeAlign('center')}
+              className={`p-1 rounded cursor-pointer transition ${
+                textAlign === 'center' ? 'bg-white/20 text-white shadow-sm' : 'text-gray-400 hover:text-white'
+              }`}
+              title="Align Center / Middle"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 4h18v2H3V4zm3 5h12v2H6V9zm-3 5h18v2H3v-2zm3 5h12v2H6v-2z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => onChangeAlign && onChangeAlign('right')}
+              className={`p-1 rounded cursor-pointer transition ${
+                textAlign === 'right' ? 'bg-white/20 text-white shadow-sm' : 'text-gray-400 hover:text-white'
+              }`}
+              title="Align Right"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 4h18v2H3V4zm6 5h12v2H9V9zm-6 5h18v2H3v-2zm6 5h12v2H9v-2z" />
+              </svg>
             </button>
           </div>
         </div>

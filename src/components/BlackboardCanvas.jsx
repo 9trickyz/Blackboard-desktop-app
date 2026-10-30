@@ -4,9 +4,13 @@ import {
   drawShapeToContext,
   drawLineToContext,
   drawTextToContext,
-  drawImageToContext
+  drawImageToContext,
+  getWrappedTextLines
 } from '../utils/exporter';
 import { recognizeStroke } from '../utils/inkToShape';
+
+let staticMeasureCanvas = null;
+let staticMeasureCtx = null;
 
 // Helper to get element bounds
 function getSingleElementBounds(el) {
@@ -39,21 +43,41 @@ function getSingleElementBounds(el) {
     };
   }
   if (el.type === 'text') {
-    const lines = (el.text || '').split('\n');
-    let maxLineLen = 0;
-    lines.forEach(l => { if (l.length > maxLineLen) maxLineLen = l.length; });
-    const approxW = Math.max(60, maxLineLen * (el.fontSize || 16) * 0.62);
+    const fontSize = el.fontSize || 16;
+    const fontStyle = el.italic ? 'italic ' : '';
+    const fontWeight = el.bold ? 'bold ' : 'normal ';
+    const font = `${fontStyle}${fontWeight}${fontSize}px Inter, sans-serif`;
+    const lines = getWrappedTextLines(el.text, fontSize, font, el.width);
+
+    let maxLineWidth = 0;
+    if (typeof document !== 'undefined') {
+      if (!staticMeasureCanvas) {
+        staticMeasureCanvas = document.createElement('canvas');
+        staticMeasureCtx = staticMeasureCanvas.getContext('2d');
+      }
+      staticMeasureCtx.font = font;
+      for (const l of lines) {
+        const w = staticMeasureCtx.measureText(l).width;
+        if (w > maxLineWidth) maxLineWidth = w;
+      }
+    } else {
+      maxLineWidth = Math.max(...lines.map(l => l.length * fontSize * 0.62), 60);
+    }
+
+    const boxWidth = el.width ? Math.max(el.width, 60) : Math.max(maxLineWidth, 60);
     const lineCount = Math.max(1, lines.length);
-    const h = (el.fontSize || 16) * 1.35 * lineCount;
+    const lineHeight = fontSize * 1.35;
+    const totalHeight = lineCount * lineHeight;
+
     return {
       minX: el.x,
-      minY: el.y - (el.fontSize || 16),
-      maxX: el.x + approxW,
-      maxY: el.y + h - (el.fontSize || 16),
-      width: approxW,
-      height: h,
-      centerX: el.x + approxW / 2,
-      centerY: el.y - (el.fontSize || 16) + h / 2
+      minY: el.y - fontSize,
+      maxX: el.x + boxWidth,
+      maxY: el.y - fontSize + totalHeight,
+      width: boxWidth,
+      height: totalHeight,
+      centerX: el.x + boxWidth / 2,
+      centerY: el.y - fontSize + totalHeight / 2
     };
   }
   if (el.type === 'pen' && el.points && el.points.length > 0) {
@@ -212,6 +236,8 @@ export default function BlackboardCanvas({
   isBold,
   isItalic,
   isStrikethrough,
+  textAlign = 'left',
+  onChangeAlign,
   pattern, // 'blank' | 'grid' | 'dotted'
   settings,
   zoomLevel,
@@ -257,11 +283,20 @@ export default function BlackboardCanvas({
       onChangeElements(curElements.filter(el => el.id !== currentId));
       setSelectedElementIds(prev => prev.filter(id => id !== currentId));
     } else {
+      // If user resized textarea in DOM, persist width
+      const textareaEl = textareaRef.current;
+      if (textareaEl && textareaEl.clientWidth) {
+        const measuredW = Math.round(textareaEl.clientWidth / (viewTransform.scale || 1));
+        if (measuredW > 60 && (!currentEl.width || Math.abs(currentEl.width - measuredW) > 10)) {
+          const updatedEl = { ...currentEl, width: measuredW };
+          onChangeElements(curElements.map(el => el.id === currentId ? updatedEl : el));
+        }
+      }
       // Keep deployed text element
       setSelectedElementIds([currentId]);
     }
     setEditingTextId(null);
-  }, [onChangeElements]);
+  }, [onChangeElements, viewTransform.scale]);
 
   // Focus and caret positioning when editingTextId activates
   useEffect(() => {
@@ -284,18 +319,23 @@ export default function BlackboardCanvas({
   const resizeInitialData = useRef(null);
   const [resizeTooltip, setResizeTooltip] = useState(null);
 
-  // Sync toolbar font size when a single text element is selected
+  // Sync toolbar font size & alignment when a single text element is selected
   useEffect(() => {
-    if (selectedElementIds.length === 1 && onChangeFontSize) {
+    if (selectedElementIds.length === 1) {
       const selectedEl = elementsRef.current.find(el => el.id === selectedElementIds[0]);
-      if (selectedEl && selectedEl.type === 'text' && selectedEl.fontSize) {
-        onChangeFontSize(selectedEl.fontSize);
+      if (selectedEl && selectedEl.type === 'text') {
+        if (selectedEl.fontSize && onChangeFontSize) {
+          onChangeFontSize(selectedEl.fontSize);
+        }
+        if (selectedEl.align && onChangeAlign) {
+          onChangeAlign(selectedEl.align);
+        }
       }
     }
-  }, [selectedElementIds, onChangeFontSize]);
+  }, [selectedElementIds, onChangeFontSize, onChangeAlign]);
 
   // Sync toolbar styling property changes to selected text elements safely (only when property actively changes)
-  const prevPropsRef = useRef({ fontSize, textColor, isBold, isItalic, isStrikethrough });
+  const prevPropsRef = useRef({ fontSize, textColor, isBold, isItalic, isStrikethrough, textAlign });
   useEffect(() => {
     const prev = prevPropsRef.current;
     const fsChanged = prev.fontSize !== fontSize;
@@ -303,9 +343,10 @@ export default function BlackboardCanvas({
     const bChanged = prev.isBold !== isBold;
     const itChanged = prev.isItalic !== isItalic;
     const strChanged = prev.isStrikethrough !== isStrikethrough;
-    prevPropsRef.current = { fontSize, textColor, isBold, isItalic, isStrikethrough };
+    const alignChanged = prev.textAlign !== textAlign;
+    prevPropsRef.current = { fontSize, textColor, isBold, isItalic, isStrikethrough, textAlign };
 
-    if (!fsChanged && !colChanged && !bChanged && !itChanged && !strChanged) return;
+    if (!fsChanged && !colChanged && !bChanged && !itChanged && !strChanged && !alignChanged) return;
     if (isResizing.current) return;
     if (selectedElementIds.length === 0) return;
 
@@ -318,11 +359,12 @@ export default function BlackboardCanvas({
           color: colChanged ? (textColor || '#ffffff') : el.color,
           bold: bChanged ? isBold : el.bold,
           italic: itChanged ? isItalic : el.italic,
-          strikethrough: strChanged ? isStrikethrough : el.strikethrough
+          strikethrough: strChanged ? isStrikethrough : el.strikethrough,
+          align: alignChanged ? (textAlign || 'left') : (el.align || 'left')
         };
       })
     );
-  }, [fontSize, textColor, isBold, isItalic, isStrikethrough, selectedElementIds, onChangeElements]);
+  }, [fontSize, textColor, isBold, isItalic, isStrikethrough, textAlign, selectedElementIds, onChangeElements]);
   
   // Marquee selection (Grey selection box)
   const isMarqueeSelecting = useRef(false);
@@ -630,21 +672,27 @@ export default function BlackboardCanvas({
             x: (clickedHandle.x - clickedHandle.anchorX) / Math.max(0.001, vLen),
             y: (clickedHandle.y - clickedHandle.anchorY) / Math.max(0.001, vLen)
           },
+          combinedBounds: { ...combinedBounds },
           elements: elementsRef.current
             .filter(el => selectedElementIds.includes(el.id))
-            .map(el => ({
-              ...el,
-              initialFontSize: el.fontSize || 16,
-              initialX: el.x,
-              initialY: el.y,
-              initialWidth: el.width,
-              initialHeight: el.height,
-              initialX1: el.x1,
-              initialY1: el.y1,
-              initialX2: el.x2,
-              initialY2: el.y2,
-              initialPoints: el.points ? el.points.map(p => ({ ...p })) : null
-            }))
+            .map(el => {
+              const b = getSingleElementBounds(el);
+              return {
+                ...el,
+                initialFontSize: el.fontSize || 16,
+                initialX: el.x,
+                initialY: el.y,
+                initialWidth: el.width || b.width,
+                initialHeight: el.height || b.height,
+                boundWidth: b.width,
+                boundHeight: b.height,
+                initialX1: el.x1,
+                initialY1: el.y1,
+                initialX2: el.x2,
+                initialY2: el.y2,
+                initialPoints: el.points ? el.points.map(p => ({ ...p })) : null
+              };
+            })
         };
         setCursorMode(clickedHandle.cursor);
         return;
@@ -764,7 +812,8 @@ export default function BlackboardCanvas({
         italic: isItalic,
         strikethrough: isStrikethrough,
         opacity: transparency,
-        rotation: 0
+        rotation: 0,
+        align: textAlign || 'left'
       };
 
       // Mark as just created to ignore immediate focus loss on click release
@@ -850,13 +899,161 @@ export default function BlackboardCanvas({
 
     const coords = toCanvasCoords(e.clientX, e.clientY);
 
-    // 1. Handle Active Selection Resize (changing text size & element dimensions)
+    // 1. Handle Active Selection Resize (changing text size, restructuring width & element dimensions)
     if (isResizing.current && resizeInitialData.current) {
       const { handle, vectorLen, unitVector, elements: initEls } = resizeInitialData.current;
       const anchorX = handle.anchorX;
       const anchorY = handle.anchorY;
+      const handleId = handle.id;
 
-      // Project mouse vector from anchor onto initial handle vector
+      const isHorizontalEdge = handleId === 'e' || handleId === 'w';
+      const isVerticalEdge = handleId === 'n' || handleId === 's';
+
+      // A. Horizontal Edge Dragging (Middle Left / Middle Right): Thin or widen text column / restructure alignment
+      if (isHorizontalEdge) {
+        let textWidthReport = null;
+
+        const updated = elementsRef.current.map(el => {
+          const init = initEls.find(item => item.id === el.id);
+          if (!init) return el;
+
+          if (init.type === 'text') {
+            let newX = init.initialX;
+            let newWidth = init.initialWidth;
+
+            if (handleId === 'e') {
+              // Right handle dragged: anchor is on the left
+              newWidth = Math.max(60, Math.round(coords.x - init.initialX));
+            } else {
+              // Left handle dragged: anchor is on the right
+              const rightEdge = init.initialX + init.initialWidth;
+              newX = Math.min(rightEdge - 60, Math.round(coords.x));
+              newWidth = Math.max(60, Math.round(rightEdge - newX));
+            }
+
+            textWidthReport = newWidth;
+            return {
+              ...el,
+              x: newX,
+              width: newWidth,
+              fontSize: init.initialFontSize // Preserves text size completely! Restructures text lines!
+            };
+          }
+
+          if (init.type === 'shape' || init.type === 'image') {
+            if (handleId === 'e') {
+              return {
+                ...el,
+                width: Math.max(5, coords.x - init.initialX)
+              };
+            } else {
+              const rightEdge = init.initialX + init.initialWidth;
+              const newX = Math.min(rightEdge - 5, coords.x);
+              return {
+                ...el,
+                x: newX,
+                width: Math.max(5, rightEdge - newX)
+              };
+            }
+          }
+
+          if (init.type === 'line') {
+            const scaleFactor = Math.max(0.1, Math.min(10, (coords.x - anchorX) / Math.max(1, handle.x - anchorX)));
+            return {
+              ...el,
+              x1: anchorX + (init.initialX1 - anchorX) * scaleFactor,
+              x2: anchorX + (init.initialX2 - anchorX) * scaleFactor
+            };
+          }
+
+          return el;
+        });
+
+        onChangeElements(updated);
+
+        if (textWidthReport !== null) {
+          setResizeTooltip({
+            x: coords.x,
+            y: coords.y,
+            text: `Width: ${textWidthReport}px`
+          });
+        }
+        return;
+      }
+
+      // B. Vertical Edge Dragging (Top Middle / Bottom Middle): Adjust height / vertical bounds
+      if (isVerticalEdge) {
+        let textHeightReport = null;
+
+        const updated = elementsRef.current.map(el => {
+          const init = initEls.find(item => item.id === el.id);
+          if (!init) return el;
+
+          if (init.type === 'text') {
+            const topY = init.initialY - init.initialFontSize;
+            let newY = init.initialY;
+            let newHeight = init.initialHeight;
+
+            if (handleId === 's') {
+              newHeight = Math.max(init.initialFontSize * 1.5, Math.round(coords.y - topY));
+            } else {
+              const bottomY = topY + init.initialHeight;
+              const currentTop = Math.min(bottomY - init.initialFontSize * 1.5, coords.y);
+              newHeight = Math.max(init.initialFontSize * 1.5, Math.round(bottomY - currentTop));
+              newY = currentTop + init.initialFontSize;
+            }
+
+            textHeightReport = newHeight;
+            return {
+              ...el,
+              y: newY,
+              height: newHeight,
+              fontSize: init.initialFontSize // Preserves text size completely!
+            };
+          }
+
+          if (init.type === 'shape' || init.type === 'image') {
+            if (handleId === 's') {
+              return {
+                ...el,
+                height: Math.max(5, coords.y - init.initialY)
+              };
+            } else {
+              const bottomEdge = init.initialY + init.initialHeight;
+              const newY = Math.min(bottomEdge - 5, coords.y);
+              return {
+                ...el,
+                y: newY,
+                height: Math.max(5, bottomEdge - newY)
+              };
+            }
+          }
+
+          if (init.type === 'line') {
+            const scaleFactor = Math.max(0.1, Math.min(10, (coords.y - anchorY) / Math.max(1, handle.y - anchorY)));
+            return {
+              ...el,
+              y1: anchorY + (init.initialY1 - anchorY) * scaleFactor,
+              y2: anchorY + (init.initialY2 - anchorY) * scaleFactor
+            };
+          }
+
+          return el;
+        });
+
+        onChangeElements(updated);
+
+        if (textHeightReport !== null) {
+          setResizeTooltip({
+            x: coords.x,
+            y: coords.y,
+            text: `Height: ${Math.round(textHeightReport)}px`
+          });
+        }
+        return;
+      }
+
+      // C. Corner Handles ('nw', 'ne', 'se', 'sw'): Scale font size and element dimensions
       const dx = coords.x - anchorX;
       const dy = coords.y - anchorY;
       const proj = dx * unitVector.x + dy * unitVector.y;
@@ -872,9 +1069,11 @@ export default function BlackboardCanvas({
         if (init.type === 'text') {
           const newSize = Math.max(8, Math.min(160, Math.round(init.initialFontSize * scaleFactor)));
           primaryFontSize = newSize;
+          const scaleRatio = newSize / init.initialFontSize;
           return {
             ...el,
             fontSize: newSize,
+            width: init.initialWidth ? Math.round(init.initialWidth * scaleRatio) : undefined,
             x: anchorX + (init.initialX - anchorX) * scaleFactor,
             y: anchorY + (init.initialY - anchorY) * scaleFactor
           };
@@ -1396,12 +1595,17 @@ export default function BlackboardCanvas({
             position: 'absolute',
             left: `${editingTextElement.x * viewTransform.scale + viewTransform.x}px`,
             top: `${editingTextElement.y * viewTransform.scale + viewTransform.y - ((editingTextElement.fontSize || 16) * viewTransform.scale * 1.15)}px`,
+            width: editingTextElement.width ? `${editingTextElement.width * viewTransform.scale}px` : 'auto',
+            maxWidth: '90vw',
             fontSize: `${(editingTextElement.fontSize || 16) * viewTransform.scale}px`,
             lineHeight: 1.35,
             color: editingTextElement.color || '#ffffff',
             fontWeight: editingTextElement.bold ? 'bold' : 'normal',
             fontStyle: editingTextElement.italic ? 'italic' : 'normal',
             textDecoration: editingTextElement.strikethrough ? 'line-through' : 'none',
+            textAlign: editingTextElement.align || 'left',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
             background: 'rgba(20, 20, 25, 0.88)',
             border: '1px dashed rgba(255, 255, 255, 0.45)',
             borderRadius: '6px',
