@@ -38,7 +38,7 @@
 - **Pattern Backgrounds**: Seamlessly cycle between **Blank**, **Grid**, and **Dotted** patterns via the dock button (`SquareTool.png`, `GridTool.png`, `dottedTool.png`).
 - **Glassmorphic Docks & Popovers**: Polished translucent panels with subtle inner highlights and drop shadows.
 
-### 2. Docks & Navigation (Guide Pages 1–2, 11)
+### 2. Docks & Navigation
 - **Left Dock**: Open File / Load Board (`FolderIcon.png`), New Board (`FileTool.png`), and Settings (`SetingsTool.png`).
 - **Center Toolbar**:
   - Mode Switch: **View Mode** (`ViewIcon.png`) vs **Edit Mode** (`EditTool.png`).
